@@ -12,6 +12,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { SupplierCard } from "@/components/sourcery/supplier-card"
 import { usePreferences } from "@/lib/preferences-context"
 import { saveLatestResult, pushRecentQuery } from "@/lib/sourcing-result-store"
+import { saveSearchAction } from "@/lib/sourcery/actions"
 import type { SourcingResult } from "@/lib/sourcery/orchestrator"
 
 // Quick-start prompt suggestions to give first-time users an easy path in.
@@ -70,6 +71,11 @@ export function SourcingChat() {
       saveLatestResult(data)
       // Append to the recent-queries list for the dashboard.
       pushRecentQuery({ query: trimmed, bangladeshMode, count: data.suppliers.length, ts: new Date().toISOString() })
+      // Fire-and-forget persistence to Supabase — silently no-ops when the user isn't signed in.
+      // We intentionally do NOT await this so it never blocks the UI.
+      void saveSearchAction({ query: trimmed, bangladeshMode, result: data }).catch((err) => {
+        console.log("[v0] saveSearchAction failed:", (err as Error).message)
+      })
       setStatus("done")
     } catch (err) {
       console.log("[v0] sourcing-chat error:", (err as Error).message)

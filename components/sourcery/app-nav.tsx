@@ -1,12 +1,13 @@
-"use client"
-
 // Top navigation for the Sourcery app shell — visible on every /app/* page.
-// Hosts the brand mark, route links, and the Bangladesh Mode toggle.
+// Hosts the brand mark, route links, the Bangladesh Mode toggle, and an auth-aware action.
+"use client"
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
+import { LogOut } from "lucide-react"
 import { BangladeshToggle } from "@/components/sourcery/bangladesh-toggle"
 import { usePreferences } from "@/lib/preferences-context"
+import { signOutAction } from "@/lib/sourcery/actions"
 import { cn } from "@/lib/utils"
 
 // Static link list — Source (chat), Compare (scorecard + profit), Recent (history).
@@ -16,7 +17,10 @@ const LINKS = [
   { href: "/app/dashboard", label: "Recent" },
 ]
 
-export function AppNav() {
+// Tiny user shape — kept narrow on purpose so we don't ship full auth payloads to the client.
+type UserInfo = { id: string; email: string | null } | null
+
+export function AppNav({ user }: { user: UserInfo }) {
   // Used to highlight the active link.
   const pathname = usePathname()
   // Used to render the orange BD-mode accent border on the nav.
@@ -53,8 +57,31 @@ export function AppNav() {
           ))}
         </nav>
 
-        {/* Bangladesh Mode toggle on the right edge. */}
-        <BangladeshToggle />
+        {/* Right cluster — BD toggle + auth state. */}
+        <div className="flex items-center gap-2 md:gap-4">
+          <BangladeshToggle />
+          {user ? (
+            // Signed in — show a server-action sign-out form (no JS state required).
+            <form action={signOutAction}>
+              <button
+                type="submit"
+                className="hidden items-center gap-1.5 rounded-full border border-border/70 px-3 py-1 text-xs uppercase tracking-[0.16em] text-muted-foreground transition-colors hover:text-foreground sm:inline-flex"
+                aria-label="Sign out"
+              >
+                <LogOut className="h-3.5 w-3.5" />
+                Sign out
+              </button>
+            </form>
+          ) : (
+            // Signed out — link to the auth flow.
+            <Link
+              href="/auth/login"
+              className="hidden rounded-full border border-border/70 px-3 py-1 text-xs uppercase tracking-[0.16em] text-muted-foreground transition-colors hover:text-foreground sm:inline-block"
+            >
+              Sign in
+            </Link>
+          )}
+        </div>
       </div>
     </header>
   )
