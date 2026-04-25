@@ -79,10 +79,12 @@ function rollupConfidence(items: { confidence: "high" | "medium" | "low" }[]): "
 
 // Run the agent call once and return the parsed structured object (or throw).
 async function callCombinedAgent(prompt: string, retryHint?: string): Promise<CombinedAgentOutput> {
-  // Using gpt-5-mini as the workhorse model — strong structured-output performance, low cost,
-  // works great with Output.object() strict mode. Anthropic Opus is reserved for premium tier
-  // (we leave a single-line model swap available for judges/demo days).
-  const model = "openai/gpt-5-mini"
+  // Reasoning model — Claude Opus per the project's tiered model strategy (Option B):
+  // Opus handles the Discovery + Risk + Comparison agents because their output drives every
+  // downstream UI (explainability, scorecards, BD-mode reasoning). Cheaper one-liner agents
+  // (Bargain, Simulation explainer, Profit explainer) run on gpt-5-mini elsewhere.
+  // Cost guard: ~$0.05 per uncached run × aggressive 24h ai_cache keeps total well under $20.
+  const model = "anthropic/claude-opus-4.6"
 
   // generateText with Output.object() is the AI SDK 6 replacement for the deprecated generateObject.
   const { output } = await generateText({

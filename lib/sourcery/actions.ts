@@ -29,8 +29,13 @@ export async function saveSearchAction(payload: {
     // The full agent output (suppliers + discovery + risk + comparison + explainability) lives in jsonb.
     results: payload.result,
     metadata: {
+      // Number of suppliers returned — used by the dashboard list to show "12 suppliers".
+      result_count: payload.result.suppliers.length,
+      // Aggregate confidence rollup — surfaced as a pill on dashboard rows.
       confidence: payload.result.meta.confidence,
+      // Country diversity check — useful for evals and future analytics.
       country_diversity: payload.result.meta.country_diversity,
+      // Whether this run was served from the AI cache (telemetry only).
       cached: payload.result.meta.cached,
     },
   })
