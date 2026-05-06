@@ -1,76 +1,145 @@
-// Zod schemas — validate every input/output that crosses an AI boundary.
-// Using `nullable()` (not `optional()`) per AI SDK 6 OpenAI strict-mode rule.
-
 import { z } from "zod"
 
-// Reusable explainability sub-schema. Embedded in Discovery/Risk/Comparison outputs.
+export const SupplierCategorySchema = z.enum([
+  "apparel",
+  "beauty",
+  "home",
+  "food",
+  "accessories",
+  "packaging",
+  "electronics",
+  "textiles",
+  "footwear",
+  "industrial",
+])
+export const SupplierRegionSchema = z.enum([
+  "South Asia",
+  "Southeast Asia",
+  "East Asia",
+  "Europe",
+  "MENA",
+  "Africa",
+  "North America",
+  "South America",
+])
+
+export const SupplierSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string().min(2),
+  country: z.string().min(2),
+  city: z.string().min(2),
+  region: SupplierRegionSchema,
+  category: SupplierCategorySchema,
+  subcategory: z.string().min(2).default("general"),
+  description: z.string().min(10),
+  unit_price_usd: z.coerce.number().nonnegative(),
+  moq: z.coerce.number().int().positive(),
+  lead_time_days: z.coerce.number().int().positive(),
+  on_time_rate: z.coerce.number().min(0).max(100).default(90),
+  quality_rating: z.coerce.number().min(0).max(5).default(4),
+  risk_score: z.coerce.number().int().min(0).max(100),
+  risk_level: z.enum(["low", "medium", "high"]).optional(),
+  risk_notes: z.string().nullable().optional(),
+  certifications: z.array(z.string()).default([]),
+  bgmea_certified: z.boolean().default(false),
+  source_type: z.enum(["synthetic", "public_web", "partner", "upload"]).optional(),
+  source_url: z.string().url().nullable().optional(),
+  verified_at: z.string().nullable().optional(),
+  retrieval_score: z.number().nullable().optional(),
+})
+
+export const SourceRequestSchema = z.object({
+  query: z.string().trim().min(5).max(800),
+  bangladeshMode: z.boolean().default(false),
+  topK: z.number().int().min(3).max(10).default(10),
+  category: SupplierCategorySchema.nullable().optional(),
+})
+
+export const SupplierListRequestSchema = z.object({
+  q: z.string().trim().max(120).optional(),
+  category: SupplierCategorySchema.optional(),
+  country: z.string().trim().max(80).optional(),
+  region: SupplierRegionSchema.optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+  offset: z.coerce.number().int().min(0).default(0),
+})
+
+export const BargainRequestSchema = z.object({
+  supplier: SupplierSchema.pick({
+    name: true,
+    country: true,
+    unit_price_usd: true,
+    moq: true,
+    lead_time_days: true,
+  }),
+  productDescription: z.string().trim().max(400).default("consumer products"),
+  orderQuantity: z.coerce.number().int().min(1).max(100000).default(300),
+})
+
+export const ProfitInputsSchema = z.object({
+  selling_price: z.coerce.number().positive(),
+  shipping_cost_per_unit: z.coerce.number().min(0).default(1.5),
+  customs_rate: z.coerce.number().min(0).max(100).default(5),
+  packaging_cost_per_unit: z.coerce.number().min(0).default(0.8),
+  order_quantity: z.coerce.number().int().min(1).default(300),
+})
+
+export const SimulationInputSchema = z.object({
+  shipping_cost_delta_pct: z.coerce.number().min(-50).max(200).default(0),
+  lead_time_delta_days: z.coerce.number().min(-30).max(90).default(0),
+  order_quantity: z.coerce.number().int().min(1).default(300),
+  selling_price: z.coerce.number().min(0.01),
+  supplier_price_delta_pct: z.coerce.number().min(-30).max(100).default(0),
+})
+
+export const SimulationRequestSchema = z.object({
+  suppliers: z.array(SupplierSchema).min(1).max(10),
+  baseInputs: ProfitInputsSchema,
+  deltas: SimulationInputSchema,
+})
+
 export const ExplainabilitySchema = z.object({
-  // 20–200 char rationale string.
   explanation: z.string().min(20).max(220),
-  // 2–5 short factor strings; further validated post-parse for numeric content.
   key_factors: z.array(z.string().min(3).max(120)).min(2).max(5),
-  // Tri-state confidence indicator.
   confidence: z.enum(["high", "medium", "low"]),
-  // One-sentence reason for the confidence bucket.
   confidence_reason: z.string().min(5).max(160),
 })
 
-// Output schema for the Discovery agent — one record per shortlisted supplier.
 export const DiscoveryItemSchema = z
   .object({
-    // UUID matching a row in public.suppliers.
-    supplier_id: z.string(),
-    // 1-indexed rank position (1 = best fit).
+    supplier_id: z.string().uuid(),
     rank: z.number().int().min(1).max(10),
-    // Composite fit score from the agent (0–100).
     fit_score: z.number().min(0).max(100),
   })
   .merge(ExplainabilitySchema)
 
-// Output schema for the Risk agent — flags + adjusted note per supplier.
 export const RiskItemSchema = z
   .object({
-    // UUID matching a row in public.suppliers.
-    supplier_id: z.string(),
-    // 0–5 short risk flag strings (e.g. "Lead time exceeds buyer SLA").
+    supplier_id: z.string().uuid(),
     risk_flags: z.array(z.string().min(3).max(120)).max(5),
-    // True if the agent applied the Bangladesh Mode 20% risk reduction.
     bd_mode_adjusted: z.boolean(),
   })
   .merge(ExplainabilitySchema)
 
-// Output schema for the Comparison agent — structured scorecard per supplier.
 export const ComparisonItemSchema = z
   .object({
-    // UUID matching a row in public.suppliers.
-    supplier_id: z.string(),
-    // Numeric scorecard (mirrors the Supplier numeric fields).
+    supplier_id: z.string().uuid(),
     scorecard: z.object({
-      // Per-unit price USD.
       price: z.number(),
-      // Lead time in days.
       lead_time_days: z.number().int(),
-      // Minimum order quantity in units.
       moq: z.number().int(),
-      // On-time delivery rate (0–100).
       on_time_rate: z.number(),
-      // Quality rating (0–5).
       quality_rating: z.number(),
     }),
   })
   .merge(ExplainabilitySchema)
 
-// The single combined output schema — one Opus call returns all three agents' results.
 export const CombinedAgentOutputSchema = z.object({
-  // Discovery agent shortlist (10 items).
   discovery: z.array(DiscoveryItemSchema).min(1).max(10),
-  // Risk agent flags (parallel with discovery, same supplier_ids).
   risk: z.array(RiskItemSchema).min(1).max(10),
-  // Comparison scorecards (parallel with discovery).
   comparison: z.array(ComparisonItemSchema).min(1).max(10),
 })
 
-// Public type aliases inferred from the schemas — keeps types in lockstep with validators.
 export type DiscoveryItem = z.infer<typeof DiscoveryItemSchema>
 export type RiskItem = z.infer<typeof RiskItemSchema>
 export type ComparisonItem = z.infer<typeof ComparisonItemSchema>

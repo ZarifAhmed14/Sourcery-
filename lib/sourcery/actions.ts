@@ -2,7 +2,7 @@
 // Server actions run only on the server, so the Supabase service role / cookies stay private.
 "use server"
 
-import { createClient } from "@/lib/supabase/server"
+import { createClient, isSupabaseConfigured } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
 import type { SourcingResult } from "@/lib/sourcery/orchestrator"
 
@@ -13,6 +13,7 @@ export async function saveSearchAction(payload: {
   bangladeshMode: boolean
   result: SourcingResult
 }): Promise<{ ok: boolean; reason?: string }> {
+  if (!isSupabaseConfigured()) return { ok: false, reason: "supabase_not_configured" }
   // Server-side Supabase client; reads the request cookies automatically.
   const supabase = await createClient()
   // Determine whether someone is signed in. We don't error if not — we just skip.
@@ -50,6 +51,7 @@ export async function saveSearchAction(payload: {
 
 // Sign the current user out and bounce them back to the landing page.
 export async function signOutAction(): Promise<void> {
+  if (!isSupabaseConfigured()) redirect("/")
   const supabase = await createClient()
   await supabase.auth.signOut()
   redirect("/")

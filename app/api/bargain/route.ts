@@ -1,51 +1,71 @@
-// Bargain Copilot endpoint — generates a Bangla supplier outreach message.
-// Uses gpt-5-mini with a tight 200-token cap for cost discipline (~$0.001 per call).
-
-import { NextResponse } from "next/server"
 import { generateText } from "ai"
+import { BargainRequestSchema } from "@/lib/schemas"
+import type { z } from "zod"
+import { getBargainModel, hasAiGenerationEnv, isAiDisabled } from "@/lib/env"
+import { BARGAIN_RATE_LIMIT, checkRateLimit } from "@/lib/backend/rate-limit"
+import { errorJson, getClientIp, handleApiError, okJson, parseJson, readJson } from "@/lib/backend/http"
 
-// Force Node.js runtime — required for AI SDK v6.
 export const runtime = "nodejs"
-// 30s budget is more than enough for a 80-word generation.
 export const maxDuration = 30
 
-// POST /api/bargain
+type BargainInput = z.infer<typeof BargainRequestSchema>
+
+function deterministicBanglaFallback(input: BargainInput): string {
+  const productDescription = input.productDescription ?? "consumer products"
+  const orderQuantity = input.orderQuantity ?? 300
+  return [
+    `আসসালামু আলাইকুম, ${input.supplier.name} টিম,`,
+    `আমরা ${input.supplier.country} থেকে ${productDescription} সোর্সিং করতে আগ্রহী।`,
+    `আপনাদের ইউনিট মূল্য $${input.supplier.unit_price_usd}, MOQ ${input.supplier.moq} ইউনিট এবং লিড টাইম ${input.supplier.lead_time_days} দিন দেখেছি।`,
+    `${orderQuantity} ইউনিট অর্ডারের জন্য সেরা মূল্য, স্যাম্পল এবং উৎপাদন সময় জানালে উপকৃত হব।`,
+  ].join(" ")
+}
+
 export async function POST(req: Request) {
   try {
-    // Parse + minimally validate the request body.
-    const body = await req.json().catch(() => ({}))
-    const supplier = body?.supplier as { name?: string; country?: string; unit_price_usd?: number; moq?: number; lead_time_days?: number } | undefined
-    const productDescription = typeof body?.productDescription === "string" ? body.productDescription.slice(0, 400) : ""
-    const orderQuantity = Number.isFinite(body?.orderQuantity) ? Number(body.orderQuantity) : 300
-    if (!supplier?.name || !supplier?.country) {
-      return NextResponse.json({ error: "Missing supplier name/country." }, { status: 400 })
+    const ip = getClientIp(req)
+    const rate = checkRateLimit(`bargain:${ip}`, BARGAIN_RATE_LIMIT)
+    if (!rate.allowed) {
+      return errorJson("RATE_LIMITED", "Too many bargain requests. Please wait before trying again.", 429, {
+        retry_after_seconds: rate.retryAfter,
+      })
     }
 
-    // Compose the prompt — concrete numeric grounding so the message references real data.
+    const rawInput = parseJson(BargainRequestSchema, await readJson(req))
+    const input: BargainInput = {
+      ...rawInput,
+      productDescription: rawInput.productDescription ?? "consumer products",
+      orderQuantity: rawInput.orderQuantity ?? 300,
+    }
+    const fallback = deterministicBanglaFallback(input)
+
+    if (isAiDisabled() || !hasAiGenerationEnv()) {
+      return okJson({ message: fallback, meta: { llm_mode: "deterministic_fallback" } })
+    }
+
     const prompt = [
-      `Generate a polite, business-appropriate supplier outreach message in BANGLA (Bengali script).`,
-      `Buyer is interested in ${productDescription || "consumer products"} from ${supplier.name} in ${supplier.country}.`,
-      `Reference: unit price $${supplier.unit_price_usd ?? "—"}, MOQ ${supplier.moq ?? "—"} units, lead time ${supplier.lead_time_days ?? "—"} days.`,
-      `The buyer is considering an order of ${orderQuantity} units.`,
-      `Politely ask if there is flexibility on price, request a sample, and ask about timeline.`,
-      `Tone: respectful, professional, appropriate for South Asian B2B norms.`,
-      `Output: ONLY the Bangla message body. Maximum ~80 words. No preamble, no English translation.`,
+      "Generate a professional but friendly supplier outreach message in Bengali script.",
+      `Buyer is interested in ${input.productDescription ?? "consumer products"} from ${input.supplier.name} in ${input.supplier.country}.`,
+      `Reference unit price $${input.supplier.unit_price_usd}, MOQ ${input.supplier.moq} units, lead time ${input.supplier.lead_time_days} days.`,
+      `The buyer is considering ${input.orderQuantity ?? 300} units.`,
+      "Ask politely about price flexibility, sample availability, and production timeline.",
+      "Tone: respectful and business-appropriate for South Asian B2B communication.",
+      "Return only the message body. Maximum 80 words.",
     ].join("\n")
 
-    // gpt-5-mini is the right tool here — fast, cheap, multilingual.
-    const result = await generateText({
-      model: "openai/gpt-5-mini",
-      prompt,
-      // Tight ceiling — 80 Bangla words is well under 200 tokens.
-      maxOutputTokens: 220,
-    })
-
-    // Trim and return.
-    const message = (result.text ?? "").trim()
-    if (!message) return NextResponse.json({ error: "Bargain agent returned an empty message." }, { status: 502 })
-    return NextResponse.json({ message })
+    try {
+      const result = await generateText({
+        model: getBargainModel(),
+        prompt,
+        maxOutputTokens: 220,
+      })
+      const message = result.text.trim()
+      return okJson({ message: message || fallback, meta: { llm_mode: message ? "ai" : "deterministic_fallback" } })
+    } catch (err) {
+      console.log("[sourcery] bargain fallback:", (err as Error).message)
+      return okJson({ message: fallback, meta: { llm_mode: "deterministic_fallback" } })
+    }
   } catch (err) {
-    console.log("[v0] /api/bargain error:", (err as Error).message)
-    return NextResponse.json({ error: (err as Error).message ?? "Bargain agent failed." }, { status: 500 })
+    return handleApiError(err, "Bargain agent failed.")
   }
 }

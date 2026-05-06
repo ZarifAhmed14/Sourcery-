@@ -2,7 +2,7 @@
 // cloud-backed history (signed-in users) and device-local history (everyone else).
 
 // Server-side Supabase client for reading the signed-in user's saved searches.
-import { createClient } from "@/lib/supabase/server"
+import { createClient, isSupabaseConfigured } from "@/lib/supabase/server"
 // Client-only fallback list (reads localStorage). Used when there's no auth session.
 import { LocalRecentList } from "@/components/sourcery/local-recent-list"
 // Client-only re-run button reused for cloud rows too.
@@ -22,6 +22,19 @@ type SavedSearchRow = {
 
 // Server Component — async function executed on the server every request.
 export default async function DashboardPage() {
+  if (!isSupabaseConfigured()) {
+    return (
+      <div className="space-y-8">
+        <header className="space-y-2">
+          <p className="font-mono text-xs uppercase tracking-[0.18em] text-muted-foreground">Recent runs</p>
+          <h1 className="font-serif text-4xl text-foreground">Pick up where you left off</h1>
+          <p className="text-sm text-muted-foreground">Supabase is not configured yet, so history is stored on this device only.</p>
+        </header>
+        <LocalRecentList />
+      </div>
+    )
+  }
+
   // Build the request-bound Supabase client.
   const supabase = await createClient()
   // Identify the user (returns null for guests).

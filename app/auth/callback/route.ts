@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { hasPublicSupabaseEnv } from '@/lib/env'
 import { NextRequest, NextResponse } from 'next/server'
 
 export async function GET(request: NextRequest) {
@@ -6,7 +7,7 @@ export async function GET(request: NextRequest) {
   const code = searchParams.get('code')
   const next = searchParams.get('next') ?? '/'
 
-  if (code) {
+  if (code && hasPublicSupabaseEnv()) {
     const supabase = await createClient()
     const { error } = await supabase.auth.exchangeCodeForSession(code)
     if (!error) {

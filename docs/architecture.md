@@ -1,100 +1,141 @@
-# Sourcery — AI-Native Architecture (BuildFest Phase 2)
+# Sourcery Backend Architecture
 
-This document maps Sourcery to the BuildFest 8-layer AI-Native Reference Architecture.
+Sourcery follows the Infinity AI BuildFest workflow: define a concrete business problem, design the architecture, build a knowledge layer, integrate models, orchestrate agents, validate outputs, and prepare for deployment.
 
-## Layer 1 — Data Layer
+## 1. Problem Definition
 
-**Storage:** Supabase Postgres with `pgvector` extension.
+SMEs and e-commerce founders lose weeks comparing suppliers across price, MOQ, lead time, certifications, quality, and risk. Sourcery turns a product brief into a ranked supplier shortlist with explainable trade-offs, profit impact, simulation, and localized Bangla outreach.
+
+## 2. Architecture Design
+
+The backend is a Next.js App Router API layer with Supabase Postgres as the system of record.
+
+Core API routes:
+
+| Route | Purpose |
+|---|---|
+| `POST /api/source` | Retrieve suppliers, rank them, run AI/deterministic agents, return explainable results |
+| `GET /api/suppliers` | Filterable supplier catalog for the frontend |
+| `GET /api/suppliers/[id]` | Supplier detail lookup |
+| `POST /api/bargain` | Bangla outreach generation with deterministic fallback |
+| `POST /api/simulate` | Server-side simulation helper for frontend parity |
+| `GET /api/health` | Runtime/configuration status |
+
+## 3. Data Layer
+
+Supabase schema lives in `scripts/001_create_schema.sql`.
+
+Tables:
 
 | Table | Purpose |
 |---|---|
-| `suppliers` | Supplier master record — name, country, region, category, price, MOQ, lead time, on-time rate, quality, risk score, certifications |
-| `supplier_embeddings` | 1536-dim vectors for semantic retrieval (text-embedding-3-small) |
-| `saved_searches` | User-persisted sourcing runs incl. agent output and confidence telemetry |
-| `ai_cache` | Server-side cache keyed by `sha256(query + bangladeshMode + topK)` to prevent repeat LLM calls |
+| `suppliers` | Supplier catalog, numeric decision fields, generated full-text index, optional pgvector embedding |
+| `supplier_relationships` | Lightweight graph-style links for category/region/certification peer relationships |
+| `saved_searches` | User-owned saved runs under RLS |
+| `ai_cache` | Service-role-only AI response cache |
+| `source_events` | Service-role-only telemetry for evaluation and performance review |
 
-Demo seed: 200 realistic suppliers across 9 countries and 5 consumer categories.
+Security:
 
-## Layer 2 — Knowledge Layer
+- Supplier data is public read because it is non-PII demo catalog data.
+- Saved searches are owner-only through RLS.
+- Cache and telemetry have no anon policies; backend writes use `SUPABASE_SERVICE_ROLE_KEY`.
 
-- pgvector index (HNSW) over supplier description + category + certifications.
-- Structured filters on country, region, category, MOQ, lead time, on-time rate.
-- Bangladesh Mode region filter and server-side score adjustment (see Layer 7).
-- No external scraping. No paid APIs. All knowledge comes from the seeded supplier corpus.
+## 4. Knowledge Layer / RAG
 
-## Layer 3 — Model Layer
+The retrieval layer lives in `lib/sourcery/retrieval.ts`.
 
-| Use case | Model | Rationale |
+Retrieval order:
+
+1. Detect likely product category from the buyer brief.
+2. If `OPENAI_API_KEY` is configured and supplier embeddings exist, embed the query with `text-embedding-3-small`.
+3. Call Supabase RPC `match_suppliers()` using pgvector cosine similarity.
+4. If vector retrieval is unavailable, fall back to Postgres full-text search over `search_document`.
+5. Apply Bangladesh Mode post-retrieval scoring server-side.
+
+This means the backend supports real pgvector RAG when embeddings are configured, but still works in a cheaper full-text mode for demos.
+
+## 5. Model Integration
+
+AI generation uses the Vercel AI SDK via configurable model names:
+
+| Env var | Default | Purpose |
 |---|---|---|
-| Discovery reasoning | `anthropic/claude-opus-4.6` (or 4.7 if available) | Highest-quality multi-criteria reasoning |
-| Comparison scorecards | `anthropic/claude-opus-4.6` | Structured trade-off analysis |
-| Risk analysis | `anthropic/claude-opus-4.6` | Pattern detection across certs, country, anomalies |
-| Bargain Copilot (Bangla) | `openai/gpt-5-mini` | Pure text generation, low cost |
-| Simulation rank-change explainer | `openai/gpt-5-mini` | Single sentence, 60 token cap |
-| Profit one-line explainer | `openai/gpt-5-mini` | Single sentence, 40 token cap |
-| Embeddings | `openai/text-embedding-3-small` | Cheapest viable embedding model |
+| `AI_REASONING_MODEL` | `openai/gpt-5-mini` | Discovery, Risk, Comparison structured output |
+| `AI_BARGAIN_MODEL` | `openai/gpt-5-mini` | Bangla outreach message |
+| `OPENAI_EMBEDDING_MODEL` | `text-embedding-3-small` | Supplier/query embeddings |
 
-All calls go through the **Vercel AI Gateway** (zero-config for Anthropic and OpenAI). The AI SDK v6 is used throughout with `generateObject` for structured outputs and `streamText` for chat.
+If AI credentials are missing or `AI_DISABLE_LLM=1`, the backend returns deterministic structured recommendations instead of failing.
 
-## Layer 4 — Agent Layer
+## 6. Agent Orchestration
 
-Four specialized agents, each Zod-validated:
+`lib/sourcery/orchestrator.ts` coordinates three agent roles:
 
-1. **Discovery Agent** — ranks pgvector candidates by fit; outputs explanation + key factors + confidence.
-2. **Comparison Agent** — produces scorecards; references profit-engine numbers when provided.
-3. **Risk Agent** — flags red flags (cert mismatches, anomalous prices, country risk).
-4. **Bargain Copilot** — generates Bangla supplier outreach when Bangladesh Mode is on.
+- Discovery Agent: ranks suppliers by fit.
+- Risk Agent: flags risk, lead-time, MOQ, delivery, and Bangladesh Mode adjustments.
+- Comparison Agent: returns numeric scorecards.
 
-## Layer 5 — Orchestration Layer
+All agent outputs are Zod-validated. Missing or vague outputs are repaired using deterministic fallbacks grounded in supplier fields.
 
-Single orchestrator at `app/api/source/route.ts`:
+## 7. Prompt Engineering
 
+Prompt contracts live in `lib/prompts/system.ts`.
+
+Mandatory requirements:
+
+- Every agent output must include an explanation.
+- Every explanation must reference real values such as price, MOQ, lead time, quality, risk, or on-time rate.
+- Confidence must be surfaced as `high`, `medium`, or `low`.
+- Bangladesh Mode prompt context is injected only when the user enables it.
+
+## 8. Testing & Validation
+
+Current verification:
+
+- `npm run typecheck` validates the TypeScript contract.
+- `npm run build` validates the production Next.js build.
+- `scripts/seed-suppliers.mjs` produces reproducible supplier seed SQL.
+- `scripts/embed-suppliers.mjs` populates pgvector embeddings when credentials are available.
+
+Recommended next tests:
+
+- API contract tests for `/api/source`, `/api/suppliers`, `/api/bargain`, `/api/simulate`.
+- Retrieval quality eval using fixed product briefs.
+- Cost/latency eval for cached vs uncached runs.
+
+## 9. Deployment Preparation
+
+Required env vars:
+
+```text
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_ANON_KEY=
+SUPABASE_SERVICE_ROLE_KEY=
+OPENAI_API_KEY=
 ```
-1. Receive { query, bangladeshMode, topK }
-2. Check ai_cache (sha256 hash)
-3. Embed query
-4. pgvector top-20
-5. Server-side re-score (Bangladesh Mode)
-6. Discovery Agent (top 10)
-7. Risk Agent (parallel where independent)
-8. Comparison Agent
-9. Each call wrapped in validateExplainability() retry-once → fallback
-10. Persist to ai_cache (24h TTL) + saved_searches if user authenticated
-11. Stream/return to client
+
+Optional:
+
+```text
+AI_REASONING_MODEL=
+AI_BARGAIN_MODEL=
+OPENAI_EMBEDDING_MODEL=
+AI_DISABLE_LLM=1
 ```
 
-## Layer 6 — Application Layer
+The app now avoids crashing when Supabase is missing; `/api/health` shows what is configured.
 
-- Next.js 16 App Router
-- Server Components by default
-- Server Actions for all AI calls (no client-side keys)
-- Tailwind v4 + shadcn/ui
-- Pages: `/`, `/login`, `/app`, `/app/compare`, `/app/suppliers/[id]`, `/app/dashboard`
+## 10. Impact & Scalability
 
-## Layer 7 — Trust & Safety Layer
+Impact metrics:
 
-| Mechanism | Implementation |
-|---|---|
-| Output schema validation | Zod schemas merge `ExplainabilitySchema` into every agent output |
-| Guardrail retry | `validateExplainability()` rejects vague output → re-prompt once → deterministic `fallbackExplanation()` if still failing |
-| Confidence indicator | Every recommendation shows green/amber/red dot + reason |
-| Rate limiting | In-memory token bucket on AI routes |
-| Cost limits | Hard `maxOutputTokens` per agent (Discovery 800, Comparison 600, Risk 400, Bargain 200, explainers 40–60) |
-| Bangladesh Mode disclosure | Risk Agent must flag `bd_mode_adjusted: true` when applied |
-| No hidden reasoning | All explanations exposed via `WhyThisAccordion` UI, no raw JSON shown |
+- Time-to-shortlist: weeks to minutes.
+- Supplier comparison breadth: 5-10 manual suppliers to 50+ searchable supplier profiles.
+- Decision clarity: every supplier comes with fit, risk, comparison, and confidence.
+- Localization: Bangladesh Mode and Bengali supplier outreach.
 
-## Layer 8 — Feedback Layer
+Scalability path:
 
-- Saved searches store `{ confidence, country_diversity, token_cost_estimate }` in `metadata`.
-- `/scripts/eval.ts` runs 12 fixed queries and asserts schema, numeric references, country diversity.
-- Manual edge cases tracked in `/docs/test-cases.md`.
-
-## Cross-cutting: Cost discipline
-
-- Single tiered model strategy (Opus for reasoning, gpt-5-mini for supporting calls)
-- 24h `ai_cache` TTL keyed by query hash
-- Hard token caps per agent
-- Streaming so unrendered tokens are not paid for
-- Mock supplier dataset (no scraping costs)
-- Embedding cost is one-time at seed (~$0.10)
-- Hard project cap: **$20** before deployment
+- Move rate limiting from in-memory to Redis/Upstash for distributed production.
+- Expand supplier ingestion from synthetic seed to scraping/uploads/partner data.
+- Add scheduled embedding refresh and retrieval evals.

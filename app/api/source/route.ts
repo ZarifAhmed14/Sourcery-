@@ -1,36 +1,35 @@
-// HTTP entry point for the sourcing orchestrator. Called from the chat UI on every query.
-// Server-only — never expose AI Gateway calls or DB queries to the client.
-
-import { NextResponse } from "next/server"
+import { randomUUID } from "node:crypto"
+import { SourceRequestSchema } from "@/lib/schemas"
+import { ApiRequestError, errorJson, getClientIp, handleApiError, okJson, parseJson, readJson } from "@/lib/backend/http"
+import { SOURCE_RATE_LIMIT, checkRateLimit } from "@/lib/backend/rate-limit"
 import { runSourcingOrchestrator } from "@/lib/sourcery/orchestrator"
 
-// Force Node.js runtime — AI SDK 6 explicitly forbids edge runtime in API routes.
 export const runtime = "nodejs"
-
-// Allow longer execution since Opus + 3-agent orchestration can take 10–20s.
 export const maxDuration = 60
 
-// POST /api/source — body: { query: string, bangladeshMode?: boolean }
 export async function POST(req: Request) {
+  const requestId = randomUUID()
   try {
-    // Parse + validate the JSON body.
-    const body = await req.json().catch(() => ({}))
-    const query = typeof body?.query === "string" ? body.query.trim() : ""
-    const bangladeshMode = body?.bangladeshMode === true
-    if (query.length < 5) {
-      return NextResponse.json({ error: "Query must be at least 5 characters." }, { status: 400 })
+    const ip = getClientIp(req)
+    const rate = checkRateLimit(`source:${ip}`, SOURCE_RATE_LIMIT)
+    if (!rate.allowed) {
+      return errorJson("RATE_LIMITED", "Too many sourcing runs. Please wait before trying again.", 429, {
+        retry_after_seconds: rate.retryAfter,
+      })
     }
-    // Cap query length to limit token waste from absurd inputs.
-    const safeQuery = query.slice(0, 800)
 
-    // Run the orchestrator (cache-first; falls through to LLM on miss).
-    const result = await runSourcingOrchestrator({ query: safeQuery, bangladeshMode })
+    const input = parseJson(SourceRequestSchema, await readJson(req))
+    const result = await runSourcingOrchestrator({
+      query: input.query,
+      bangladeshMode: input.bangladeshMode ?? false,
+      topK: input.topK ?? 10,
+      category: input.category,
+      requestId,
+    })
 
-    // Return the rich payload as JSON.
-    return NextResponse.json(result)
+    return okJson(result)
   } catch (err) {
-    // Log the full error server-side, but only return a safe message to the client.
-    console.log("[v0] /api/source error:", (err as Error).message)
-    return NextResponse.json({ error: (err as Error).message ?? "Sourcing run failed." }, { status: 500 })
+    if (err instanceof ApiRequestError) return handleApiError(err)
+    return handleApiError(err, "Sourcing run failed.")
   }
 }

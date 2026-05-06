@@ -3,7 +3,7 @@
 // risk indicators, and a contact CTA. No AI calls happen here (cost = $0).
 import { notFound } from "next/navigation"
 import Link from "next/link"
-import { createClient } from "@/lib/supabase/server"
+import { createClient, isSupabaseConfigured } from "@/lib/supabase/server"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -17,6 +17,10 @@ export default async function SupplierDetailPage({
 }) {
   // Pull the route param out of the awaited promise.
   const { id } = await params
+
+  if (!isSupabaseConfigured()) {
+    notFound()
+  }
 
   // Server-side Supabase client; uses the request cookies for any future RLS-aware queries.
   const supabase = await createClient()

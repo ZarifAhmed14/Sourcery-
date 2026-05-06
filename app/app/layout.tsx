@@ -5,10 +5,21 @@
 import type { ReactNode } from "react"
 import { PreferencesProvider } from "@/lib/preferences-context"
 import { AppNav } from "@/components/sourcery/app-nav"
-import { createClient } from "@/lib/supabase/server"
+import { createClient, isSupabaseConfigured } from "@/lib/supabase/server"
 
 export default async function AppLayout({ children }: { children: ReactNode }) {
   // Server-side Supabase client uses request cookies — no client roundtrip needed.
+  if (!isSupabaseConfigured()) {
+    return (
+      <PreferencesProvider>
+        <div className="min-h-screen bg-background text-foreground">
+          <AppNav user={null} />
+          <main className="mx-auto w-full max-w-6xl px-6 pb-24 pt-8 md:px-10">{children}</main>
+        </div>
+      </PreferencesProvider>
+    )
+  }
+
   const supabase = await createClient()
   // getUser returns the authenticated user (or null) — not just session, which is forgeable.
   const {
