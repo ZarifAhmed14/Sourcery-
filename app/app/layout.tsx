@@ -24,7 +24,10 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   // getUser returns the authenticated user (or null) — not just session, which is forgeable.
   const {
     data: { user },
-  } = await supabase.auth.getUser()
+  } = await supabase.auth.getUser().catch((error) => {
+    console.log("[sourcery] app shell auth skipped:", error.message)
+    return { data: { user: null } }
+  })
   // Reduce to a small, serializable shape; avoids leaking the entire auth payload to the client.
   const userInfo = user ? { id: user.id, email: user.email ?? null } : null
 

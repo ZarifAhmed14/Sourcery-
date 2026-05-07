@@ -6,6 +6,7 @@ const providedBaseUrl = process.env.SMOKE_BASE_URL
 const baseUrl = providedBaseUrl ?? `http://127.0.0.1:${port}`
 
 let server = null
+let serverOutput = ""
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms))
@@ -48,16 +49,15 @@ function startServer() {
     windowsHide: true,
   })
 
-  let output = ""
   server.stdout.on("data", (chunk) => {
-    output += chunk.toString()
+    serverOutput += chunk.toString()
   })
   server.stderr.on("data", (chunk) => {
-    output += chunk.toString()
+    serverOutput += chunk.toString()
   })
   server.on("exit", (code) => {
     if (code && code !== 0) {
-      console.error(output)
+      console.error(serverOutput)
     }
   })
 }
@@ -85,8 +85,12 @@ async function main() {
   if (!Array.isArray(source.suppliers) || source.suppliers.length === 0) {
     throw new Error("/api/source returned no suppliers")
   }
+  if (source.meta.llm_mode === "deterministic_fallback" && source.meta.ai_provider !== "none") {
+    console.error("Source used deterministic fallback while an AI provider was configured. Server log:")
+    console.error(serverOutput)
+  }
 
-  await request("/api/bargain", {
+  const bargain = await request("/api/bargain", {
     method: "POST",
     body: JSON.stringify({
       supplier,
@@ -124,7 +128,10 @@ async function main() {
         health: health.runtime,
         supplierCount: supplierList.suppliers.length,
         sourceMode: source.meta.llm_mode,
+        sourceAiProvider: source.meta.ai_provider,
         retrievalMode: source.meta.retrieval_mode,
+        bargainMode: bargain.meta.llm_mode,
+        bargainAiProvider: bargain.meta.ai_provider,
         topSupplier: source.suppliers[0]?.name,
       },
       null,

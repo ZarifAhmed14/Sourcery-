@@ -13,6 +13,7 @@ export async function recordSourceEvent(result: SourcingResult): Promise<void> {
       bangladesh_mode: result.meta.bangladeshMode,
       retrieval_mode: result.meta.retrieval_mode,
       llm_mode: result.meta.llm_mode,
+      ai_provider: result.meta.ai_provider,
       result_count: result.suppliers.length,
       country_diversity: result.meta.country_diversity,
       elapsed_ms: result.meta.elapsed_ms,

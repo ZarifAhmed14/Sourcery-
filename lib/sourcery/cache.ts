@@ -8,9 +8,23 @@ type MemoryCacheValue = {
 
 const memoryCache = new Map<string, MemoryCacheValue>()
 
-export function buildCacheKey(args: { query: string; bangladeshMode: boolean; topK: number; version?: string }): string {
+export function buildCacheKey(args: {
+  query: string
+  bangladeshMode: boolean
+  topK: number
+  category?: string | null
+  aiProvider?: string
+  version?: string
+}): string {
   const normalized = args.query.trim().toLowerCase().replace(/\s+/g, " ")
-  const raw = `${args.version ?? "source-v2"}::${normalized}::bd=${args.bangladeshMode ? 1 : 0}::k=${args.topK}`
+  const raw = [
+    args.version ?? "source-v4",
+    normalized,
+    `bd=${args.bangladeshMode ? 1 : 0}`,
+    `k=${args.topK}`,
+    `category=${args.category ?? "any"}`,
+    `ai=${args.aiProvider ?? "unknown"}`,
+  ].join("::")
   return createHash("sha256").update(raw).digest("hex")
 }
 

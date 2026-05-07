@@ -9,7 +9,9 @@
     "lint": "tsc --noEmit --pretty false",
     "typecheck": "tsc --noEmit --pretty false",
     "db:seed": "node scripts/seed-suppliers.mjs",
+    "db:seed:rich": "node scripts/upsert-rich-suppliers.mjs",
     "db:embed": "node scripts/embed-suppliers.mjs",
+    "db:verify:public": "node scripts/verify-supabase-public.mjs",
     "db:verify": "node scripts/verify-supabase.mjs",
     "smoke:api": "node scripts/smoke-api.mjs",
     "self-check": "npm run typecheck && npm run build && npm run smoke:api"

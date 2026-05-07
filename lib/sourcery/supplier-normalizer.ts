@@ -17,6 +17,10 @@ const CATEGORY_ALIASES: Record<string, SupplierCategory> = {
   home: "home",
   "home goods": "home",
   "home textiles": "home",
+  food: "food",
+  foods: "food",
+  tea: "food",
+  spices: "food",
   packaging: "packaging",
   electronics: "electronics",
   electronic: "electronics",
@@ -57,7 +61,7 @@ function asStringArray(value: unknown): string[] {
   return value.map((item) => String(item)).filter(Boolean)
 }
 
-function normalizeCategory(value: unknown): SupplierCategory {
+export function normalizeCategory(value: unknown): SupplierCategory {
   const key = asString(value, "accessories").trim().toLowerCase()
   return CATEGORY_ALIASES[key] ?? "accessories"
 }

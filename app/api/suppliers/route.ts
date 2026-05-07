@@ -25,7 +25,6 @@ export async function GET(req: Request) {
       .select("*", { count: "exact" })
       .order("rating", { ascending: false })
 
-    if (input.category) query = query.ilike("category", `%${input.category}%`)
     if (input.country) query = query.ilike("country", `%${input.country}%`)
     if (input.region) query = query.eq("region", input.region)
 

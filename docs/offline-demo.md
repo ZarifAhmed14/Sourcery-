@@ -1,6 +1,6 @@
 # Offline Demo Plan
 
-This project can be demonstrated without Supabase or AI Gateway for the next 12 hours.
+This project can be demonstrated without paid OpenAI or AI Gateway access.
 
 ## What Works Offline
 
@@ -11,7 +11,7 @@ This project can be demonstrated without Supabase or AI Gateway for the next 12 
 - Bargaining message: `POST /api/bargain`
 - Profit simulation: `POST /api/simulate`
 
-Offline responses are marked through metadata such as `retrieval_mode: "deterministic"` and `llm_mode: "deterministic_fallback"`.
+Free-provider and fallback responses are marked through metadata such as `ai_provider: "pollinations"` or `llm_mode: "deterministic_fallback"`.
 
 ## What Needs Supabase Later
 
@@ -22,16 +22,22 @@ Offline responses are marked through metadata such as `retrieval_mode: "determin
 - Source event telemetry
 - pgvector retrieval through `match_suppliers`
 
+## What Works With The Free Provider
+
+- The backend can use Pollinations text generation through `https://text.pollinations.ai/openai`.
+- Bargain messages use Pollinations when it is available and fall back to a local Bengali template if needed.
+- Structured sourcing uses vector retrieval plus deterministic ranking by default. Set `AI_ENABLE_FREE_SOURCE_AI=1` only for experiments, because the anonymous free endpoint is queue-limited.
+
 ## What Needs AI Gateway or Provider Keys Later
 
-- Live reasoning model for supplier ranking explanations
-- Live Bengali negotiation message generation
-- Embedding generation for supplier vectors
+- More reliable production-grade reasoning model calls
+- Higher rate limits and better observability
+- OpenAI provider embeddings instead of local-hash embeddings
 
 ## Judge-Safe Story
 
 The honest story is:
 
-> Sourcery has a working backend architecture with secure schema, RAG-ready retrieval, deterministic safety fallbacks, and API contracts. The live database/model layer can be switched on by adding Supabase and AI environment variables.
+> Sourcery has a working backend architecture with secure schema, RAG-ready retrieval, a free demo model path, deterministic safety fallbacks, and API contracts. The production model layer can be upgraded by adding AI Gateway or OpenAI environment variables.
 
-Do not claim the offline mode is using live supplier databases or live LLM inference.
+Do not claim the free provider is equivalent to a production OpenAI or AI Gateway deployment.

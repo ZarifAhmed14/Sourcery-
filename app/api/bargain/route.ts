@@ -1,7 +1,7 @@
-import { generateText } from "ai"
 import { BargainRequestSchema } from "@/lib/schemas"
 import type { z } from "zod"
-import { getBargainModel, hasAiGenerationEnv, isAiDisabled } from "@/lib/env"
+import { getAiGenerationProvider } from "@/lib/env"
+import { generatePlainText } from "@/lib/ai/generation"
 import { BARGAIN_RATE_LIMIT, checkRateLimit } from "@/lib/backend/rate-limit"
 import { errorJson, getClientIp, handleApiError, okJson, parseJson, readJson } from "@/lib/backend/http"
 
@@ -17,7 +17,7 @@ function deterministicBanglaFallback(input: BargainInput): string {
     `আসসালামু আলাইকুম, ${input.supplier.name} টিম,`,
     `আমরা ${input.supplier.country} থেকে ${productDescription} সোর্সিং করতে আগ্রহী।`,
     `আপনাদের ইউনিট মূল্য $${input.supplier.unit_price_usd}, MOQ ${input.supplier.moq} ইউনিট এবং লিড টাইম ${input.supplier.lead_time_days} দিন দেখেছি।`,
-    `${orderQuantity} ইউনিট অর্ডারের জন্য সেরা মূল্য, স্যাম্পল এবং উৎপাদন সময় জানালে উপকৃত হব।`,
+    `${orderQuantity} ইউনিট অর্ডারের জন্য সেরা মূল্য, স্যাম্পল সুবিধা এবং উৎপাদন সময় জানালে উপকৃত হব।`,
   ].join(" ")
 }
 
@@ -38,9 +38,10 @@ export async function POST(req: Request) {
       orderQuantity: rawInput.orderQuantity ?? 300,
     }
     const fallback = deterministicBanglaFallback(input)
+    const provider = getAiGenerationProvider()
 
-    if (isAiDisabled() || !hasAiGenerationEnv()) {
-      return okJson({ message: fallback, meta: { llm_mode: "deterministic_fallback" } })
+    if (provider === "none") {
+      return okJson({ message: fallback, meta: { llm_mode: "deterministic_fallback", ai_provider: "none" } })
     }
 
     const prompt = [
@@ -54,16 +55,21 @@ export async function POST(req: Request) {
     ].join("\n")
 
     try {
-      const result = await generateText({
-        model: getBargainModel(),
+      const result = await generatePlainText({
         prompt,
         maxOutputTokens: 220,
       })
       const message = result.text.trim()
-      return okJson({ message: message || fallback, meta: { llm_mode: message ? "ai" : "deterministic_fallback" } })
+      return okJson({
+        message: message || fallback,
+        meta: {
+          llm_mode: message ? "ai" : "deterministic_fallback",
+          ai_provider: message ? result.provider : provider,
+        },
+      })
     } catch (err) {
       console.log("[sourcery] bargain fallback:", (err as Error).message)
-      return okJson({ message: fallback, meta: { llm_mode: "deterministic_fallback" } })
+      return okJson({ message: fallback, meta: { llm_mode: "deterministic_fallback", ai_provider: provider } })
     }
   } catch (err) {
     return handleApiError(err, "Bargain agent failed.")

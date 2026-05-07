@@ -177,6 +177,14 @@ async function getEmbeddingCounts() {
   }
 }
 
+async function checkSourceEventsTable() {
+  const { error } = await admin
+    .from("source_events")
+    .select("id,ai_provider", { count: "exact", head: true })
+
+  if (error) throw error
+}
+
 let failed = false
 
 try {
@@ -228,6 +236,14 @@ try {
 } catch (error) {
   failed = true
   statusLine(false, "supplier embeddings populated", error.message)
+}
+
+try {
+  await checkSourceEventsTable()
+  statusLine(true, "source_events telemetry table exists", "id, ai_provider")
+} catch (error) {
+  failed = true
+  statusLine(false, "source_events telemetry table exists", error.message)
 }
 
 process.exit(failed ? 1 : 0)

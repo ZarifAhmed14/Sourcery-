@@ -40,7 +40,10 @@ export default async function DashboardPage() {
   // Identify the user (returns null for guests).
   const {
     data: { user },
-  } = await supabase.auth.getUser()
+  } = await supabase.auth.getUser().catch((error) => {
+    console.log("[sourcery] dashboard auth skipped:", error.message)
+    return { data: { user: null } }
+  })
 
   // Guests see the existing client-side localStorage list — no auth required.
   if (!user) {

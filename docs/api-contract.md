@@ -32,6 +32,7 @@ type SourcingResult = {
     query: string
     retrieval_mode: "vector" | "full_text" | "deterministic"
     llm_mode: "ai" | "deterministic_fallback"
+    ai_provider: "ai_sdk" | "pollinations" | "none"
     elapsed_ms: number
   }
 }
@@ -98,6 +99,7 @@ Response:
   message: string
   meta: {
     llm_mode: "ai" | "deterministic_fallback"
+    ai_provider: "ai_sdk" | "pollinations" | "none"
   }
 }
 ```
@@ -140,11 +142,15 @@ Returns non-secret backend status for debugging:
     supabase: boolean
     serviceRole: boolean
     aiGeneration: boolean
+    aiGenerationProvider: "ai_sdk" | "pollinations" | "none"
     embeddings: boolean
+    embeddingProvider: "openai" | "local_hash"
     reasoningModel: string
     embeddingModel: string
+    freeProvider: "pollinations" | "none"
+    pollinationsModel: string | null
   }
 }
 ```
 
-When Supabase or AI keys are missing, the backend intentionally stays usable through demo data and deterministic fallbacks. Frontend code should surface `meta.retrieval_mode`, `meta.llm_mode`, and list/detail `source` fields when building debug or judge-demo views.
+When paid AI keys are missing, the backend can use the free Pollinations text endpoint for lightweight demo generation. Structured sourcing defaults to vector retrieval plus deterministic ranking unless `AI_ENABLE_FREE_SOURCE_AI=1`, because the anonymous free endpoint is queue-limited. Frontend code should surface `meta.retrieval_mode`, `meta.llm_mode`, `meta.ai_provider`, and list/detail `source` fields when building debug or judge-demo views.

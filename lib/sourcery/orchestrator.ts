@@ -1,7 +1,17 @@
-import { generateText, Output } from "ai"
 import { createHash, randomUUID } from "node:crypto"
-import { CombinedAgentOutputSchema, type CombinedAgentOutput, type ComparisonItem, type DiscoveryItem, type RiskItem } from "@/lib/schemas"
-import { getReasoningModel, hasAiGenerationEnv, isAiDisabled } from "@/lib/env"
+import { z } from "zod"
+import {
+  CombinedAgentOutputSchema,
+  ComparisonItemSchema,
+  DiscoveryItemSchema,
+  RiskItemSchema,
+  type CombinedAgentOutput,
+  type ComparisonItem,
+  type DiscoveryItem,
+  type RiskItem,
+} from "@/lib/schemas"
+import { getAiGenerationProvider, isFreeSourceAiEnabled } from "@/lib/env"
+import { generateStructuredObject, type AiGenerationProvider } from "@/lib/ai/generation"
 import { ORCHESTRATOR_SYSTEM, BANGLADESH_MODE_PROMPT } from "@/lib/prompts/system"
 import { fallbackExplanation, validateExplainability } from "@/lib/guardrail"
 import { buildCacheKey, getCached, setCached } from "@/lib/sourcery/cache"
@@ -21,6 +31,14 @@ export type SourcingResult = {
     query: string
   }
 }
+
+const SingleSupplierAgentOutputSchema = z.object({
+  discovery: DiscoveryItemSchema,
+  risk: RiskItemSchema,
+  comparison: ComparisonItemSchema,
+})
+
+type SingleSupplierAgentOutput = z.infer<typeof SingleSupplierAgentOutputSchema>
 
 function leanSupplier(supplier: Supplier) {
   return {
@@ -44,12 +62,104 @@ function leanSupplier(supplier: Supplier) {
   }
 }
 
+function responseShape(candidates: Supplier[]): string {
+  return `JSON_RESPONSE_SHAPE:
+{
+  "discovery": [
+    {
+      "supplier_id": "<uuid from candidate list>",
+      "rank": 1,
+      "fit_score": 75,
+      "explanation": "Selected for 96% on-time rate and 24-day lead time.",
+      "key_factors": ["on_time_rate: 96%", "lead_time: 24 days"],
+      "confidence": "high",
+      "confidence_reason": "Strong match across 4 supplier signals."
+    }
+  ],
+  "risk": [
+    {
+      "supplier_id": "<uuid from candidate list>",
+      "risk_flags": ["MOQ is 500 units"],
+      "bd_mode_adjusted": false,
+      "explanation": "Risk is moderate at 22/100 with 24-day lead time.",
+      "key_factors": ["risk_score: 22/100", "lead_time: 24 days"],
+      "confidence": "medium",
+      "confidence_reason": "Risk uses lead time, MOQ, and risk score."
+    }
+  ],
+  "comparison": [
+    {
+      "supplier_id": "<uuid from candidate list>",
+      "scorecard": {
+        "price": 1.2,
+        "lead_time_days": 24,
+        "moq": 500,
+        "on_time_rate": 96,
+        "quality_rating": 4.7
+      },
+      "explanation": "Compares at $1.2/unit, 500 MOQ, and 4.7/5 quality.",
+      "key_factors": ["unit_price: $1.2", "quality_rating: 4.7/5"],
+      "confidence": "medium",
+      "confidence_reason": "Comparison uses concrete supplier row fields."
+    }
+  ]
+}
+Return exactly ${candidates.length} items in each array. Use only supplier_id values from the candidate list. Use no extra top-level keys.`
+}
+
 function buildUserPrompt(query: string, candidates: Supplier[], bangladeshMode: boolean): string {
   return [
     `BUYER_BRIEF:\n${query}`,
     bangladeshMode ? BANGLADESH_MODE_PROMPT : "",
     `CANDIDATE_SUPPLIERS:\n${JSON.stringify(candidates.map(leanSupplier), null, 0)}`,
+    responseShape(candidates),
     "Return one discovery, one risk, and one comparison object for every supplier_id.",
+  ]
+    .filter(Boolean)
+    .join("\n\n")
+}
+
+function buildSingleSupplierPrompt(query: string, supplier: Supplier, rank: number, bangladeshMode: boolean): string {
+  return [
+    `BUYER_BRIEF:\n${query}`,
+    bangladeshMode ? BANGLADESH_MODE_PROMPT : "",
+    `SUPPLIER:\n${JSON.stringify(leanSupplier(supplier), null, 0)}`,
+    `Return strict JSON only with this exact shape:
+{
+  "discovery": {
+    "supplier_id": "${supplier.id}",
+    "rank": ${rank},
+    "fit_score": 75,
+    "explanation": "Use concrete supplier numbers.",
+    "key_factors": ["on_time_rate: ${supplier.on_time_rate}%", "lead_time: ${supplier.lead_time_days} days"],
+    "confidence": "high",
+    "confidence_reason": "One sentence under 160 chars."
+  },
+  "risk": {
+    "supplier_id": "${supplier.id}",
+    "risk_flags": ["Risk flag with concrete value"],
+    "bd_mode_adjusted": ${bangladeshMode && ["Bangladesh", "India", "Pakistan"].includes(supplier.country) ? "true" : "false"},
+    "explanation": "Use concrete supplier numbers.",
+    "key_factors": ["risk_score: ${supplier.risk_score}/100", "moq: ${supplier.moq}"],
+    "confidence": "medium",
+    "confidence_reason": "One sentence under 160 chars."
+  },
+  "comparison": {
+    "supplier_id": "${supplier.id}",
+    "scorecard": {
+      "price": ${supplier.unit_price_usd},
+      "lead_time_days": ${supplier.lead_time_days},
+      "moq": ${supplier.moq},
+      "on_time_rate": ${supplier.on_time_rate},
+      "quality_rating": ${supplier.quality_rating}
+    },
+    "explanation": "Use concrete supplier numbers.",
+    "key_factors": ["unit_price: $${supplier.unit_price_usd}", "quality_rating: ${supplier.quality_rating}/5"],
+    "confidence": "medium",
+    "confidence_reason": "One sentence under 160 chars."
+  }
+}`,
+    "Do not change supplier_id, rank, or scorecard numbers. Keep explanations short and specific.",
   ]
     .filter(Boolean)
     .join("\n\n")
@@ -142,17 +252,53 @@ function rollupConfidence(items: { confidence: "high" | "medium" | "low" }[]): "
   return "medium"
 }
 
-async function callCombinedAgent(prompt: string, retryHint?: string): Promise<CombinedAgentOutput> {
-  const { output } = await generateText({
-    model: getReasoningModel(),
+async function callCombinedAgent(
+  prompt: string,
+  maxOutputTokens: number,
+  retryHint?: string,
+): Promise<{ output: CombinedAgentOutput; provider: Exclude<AiGenerationProvider, "none"> }> {
+  const result = await generateStructuredObject({
     system: ORCHESTRATOR_SYSTEM + (retryHint ? `\n\nRETRY_GUIDANCE:\n${retryHint}` : ""),
     prompt,
-    maxOutputTokens: 1800,
-    output: Output.object({ schema: CombinedAgentOutputSchema }),
+    maxOutputTokens,
+    schema: CombinedAgentOutputSchema,
   })
 
-  if (!output) throw new Error("Agent returned no structured output")
-  return output as CombinedAgentOutput
+  return result
+}
+
+async function callSingleSupplierAgents(
+  suppliers: Supplier[],
+  query: string,
+  bangladeshMode: boolean,
+): Promise<{ output: CombinedAgentOutput; provider: Exclude<AiGenerationProvider, "none"> }> {
+  const items: Array<{
+    output: SingleSupplierAgentOutput
+    provider: Exclude<AiGenerationProvider, "none">
+  }> = []
+
+  for (const [index, supplier] of suppliers.entries()) {
+    const result = await generateStructuredObject<SingleSupplierAgentOutput>({
+      system: [
+        "You are Sourcery's lightweight sourcing analyst.",
+        "Score exactly one supplier for discovery, risk, and comparison.",
+        "Return valid JSON only. Use the numeric supplier row fields; do not invent data.",
+      ].join("\n"),
+      prompt: buildSingleSupplierPrompt(query, supplier, index + 1, bangladeshMode),
+      maxOutputTokens: 900,
+      schema: SingleSupplierAgentOutputSchema,
+    })
+    items.push(result)
+  }
+
+  return {
+    output: {
+      discovery: items.map((item) => item.output.discovery).sort((a, b) => a.rank - b.rank),
+      risk: items.map((item) => item.output.risk),
+      comparison: items.map((item) => item.output.comparison),
+    },
+    provider: items[0]?.provider ?? "pollinations",
+  }
 }
 
 function completeAndRepair(out: CombinedAgentOutput, suppliers: Supplier[], fallback: CombinedAgentOutput): CombinedAgentOutput {
@@ -182,27 +328,44 @@ function completeAndRepair(out: CombinedAgentOutput, suppliers: Supplier[], fall
   }
 }
 
-async function runAgentWithFallback(prompt: string, suppliers: Supplier[], query: string, bangladeshMode: boolean): Promise<{ output: CombinedAgentOutput; mode: "ai" | "deterministic_fallback" }> {
+async function runAgentWithFallback(
+  prompt: string,
+  suppliers: Supplier[],
+  query: string,
+  bangladeshMode: boolean,
+  sourceProvider: AiGenerationProvider = getAiGenerationProvider(),
+): Promise<{ output: CombinedAgentOutput; mode: "ai" | "deterministic_fallback"; provider: AiGenerationProvider }> {
   const fallback = deterministicOutput(suppliers, query, bangladeshMode)
+  const configuredProvider = sourceProvider
 
-  if (isAiDisabled() || !hasAiGenerationEnv()) {
-    return { output: fallback, mode: "deterministic_fallback" }
+  if (configuredProvider === "none") {
+    return { output: fallback, mode: "deterministic_fallback", provider: "none" }
   }
 
   try {
-    const first = await callCombinedAgent(prompt)
-    const repaired = completeAndRepair(first, suppliers, fallback)
+    if (configuredProvider === "pollinations") {
+      const lite = await callSingleSupplierAgents(suppliers, query, bangladeshMode)
+      const repaired = completeAndRepair(lite.output, suppliers, fallback)
+      const invalid = [...repaired.discovery, ...repaired.risk, ...repaired.comparison].some((item) => !validateExplainability(item))
+      if (!invalid) return { output: repaired, mode: "ai", provider: lite.provider }
+      throw new Error("Pollinations supplier output failed explainability validation")
+    }
+
+    const maxOutputTokens = Math.max(3600, Math.min(5200, suppliers.length * 420))
+    const first = await callCombinedAgent(prompt, maxOutputTokens)
+    const repaired = completeAndRepair(first.output, suppliers, fallback)
     const invalid = [...repaired.discovery, ...repaired.risk, ...repaired.comparison].some((item) => !validateExplainability(item))
-    if (!invalid) return { output: repaired, mode: "ai" }
+    if (!invalid) return { output: repaired, mode: "ai", provider: first.provider }
 
     const retry = await callCombinedAgent(
       prompt,
+      maxOutputTokens,
       "Your previous explanations were too vague. Reference concrete numbers such as unit_price_usd, lead_time_days, moq, on_time_rate, quality_rating, or risk_score.",
     )
-    return { output: completeAndRepair(retry, suppliers, fallback), mode: "ai" }
+    return { output: completeAndRepair(retry.output, suppliers, fallback), mode: "ai", provider: retry.provider }
   } catch (err) {
     console.log("[sourcery] AI agent fallback:", (err as Error).message)
-    return { output: fallback, mode: "deterministic_fallback" }
+    return { output: fallback, mode: "deterministic_fallback", provider: configuredProvider }
   }
 }
 
@@ -215,6 +378,7 @@ function buildResult(args: {
   requestId: string
   retrievalMode: RetrievalMode
   llmMode: "ai" | "deterministic_fallback"
+  aiProvider: AiGenerationProvider
   startedAt: number
 }): SourcingResult {
   const allConfidences = [...args.output.discovery, ...args.output.risk, ...args.output.comparison]
@@ -232,6 +396,7 @@ function buildResult(args: {
       query: args.query,
       retrieval_mode: args.retrievalMode,
       llm_mode: args.llmMode,
+      ai_provider: args.aiProvider,
       elapsed_ms: Date.now() - args.startedAt,
     },
   }
@@ -247,7 +412,15 @@ export async function runSourcingOrchestrator(args: {
   const startedAt = Date.now()
   const requestId = args.requestId ?? randomUUID()
   const topK = args.topK ?? 10
-  const cacheKey = buildCacheKey({ query: args.query, bangladeshMode: args.bangladeshMode, topK })
+  const configuredProvider = getAiGenerationProvider()
+  const sourceProvider = configuredProvider === "pollinations" && !isFreeSourceAiEnabled() ? "none" : configuredProvider
+  const cacheKey = buildCacheKey({
+    query: args.query,
+    bangladeshMode: args.bangladeshMode,
+    topK,
+    category: args.category,
+    aiProvider: sourceProvider,
+  })
   const cached = await getCached<SourcingResult>(cacheKey)
   if (cached) {
     return {
@@ -268,7 +441,7 @@ export async function runSourcingOrchestrator(args: {
 
   const suppliers = rescoreForBangladeshMode(retrieval.suppliers, args.bangladeshMode, topK)
   const prompt = buildUserPrompt(args.query, suppliers, args.bangladeshMode)
-  const agent = await runAgentWithFallback(prompt, suppliers, args.query, args.bangladeshMode)
+  const agent = await runAgentWithFallback(prompt, suppliers, args.query, args.bangladeshMode, sourceProvider)
 
   const result = buildResult({
     query: args.query,
@@ -279,10 +452,13 @@ export async function runSourcingOrchestrator(args: {
     requestId,
     retrievalMode: retrieval.mode,
     llmMode: agent.mode,
+    aiProvider: agent.provider,
     startedAt,
   })
 
-  await setCached(cacheKey, result)
+  if (agent.mode === "ai" || agent.provider === "none") {
+    await setCached(cacheKey, result)
+  }
   await recordSourceEvent(result)
   return result
 }
