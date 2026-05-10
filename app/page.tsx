@@ -45,7 +45,7 @@ export default function HomePage() {
   return (
     <div className="min-h-screen overflow-x-hidden bg-[#f7f4ec] text-[#16201d]">
       <header className="fixed left-0 right-0 top-0 z-50 border-b border-black/10 bg-[#f7f4ec]/82 backdrop-blur-xl">
-          <div className="mx-auto flex h-16 w-full max-w-7xl items-center justify-between px-5 md:px-8">
+          <div className="mx-auto grid h-16 w-full max-w-7xl grid-cols-[auto_1fr_auto] items-center px-5 md:px-8">
           <Link href="/" className="flex items-center gap-3">
             <span className="grid h-9 w-9 place-items-center rounded-md bg-[#16201d] text-sm font-black text-[#f7f4ec]">
               SQ
@@ -55,11 +55,12 @@ export default function HomePage() {
               <span className="block text-[10px] uppercase tracking-[0.18em] text-[#66736f]">Supplier intelligence</span>
             </span>
           </Link>
-          <nav className="hidden items-center gap-7 text-sm text-[#53605c] md:flex">
+          <nav className="hidden items-center justify-self-center gap-7 text-sm text-[#53605c] md:flex">
             <Link href="/app" className="hover:text-[#16201d]">Workspace</Link>
             <a href="#proof" className="hover:text-[#16201d]">Proof</a>
             <a href="#system" className="hover:text-[#16201d]">System</a>
           </nav>
+          <div className="hidden md:block" />
         </div>
       </header>
 
