@@ -303,7 +303,7 @@ export function SourcingChat() {
   return (
     <div className="space-y-6">
       <section className="grid min-w-0 gap-5 lg:grid-cols-[0.72fr_1.28fr]">
-        <div className="w-[calc(100vw-40px)] min-w-0 rounded-lg border border-black/10 bg-white p-5 shadow-sm lg:w-auto">
+        <div className="w-full min-w-0 rounded-lg border border-black/10 bg-white p-5 shadow-sm">
           <div className="flex items-center justify-between gap-3">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#6d7a75]">Sourcing brief</p>
@@ -314,16 +314,16 @@ export function SourcingChat() {
           <button
             type="button"
             onClick={runJudgeDemo}
-            className="mt-5 flex w-full items-center justify-between rounded-md border border-[#d9b44a]/50 bg-[#fff8df] px-3 py-3 text-left text-sm font-semibold text-[#7a5b0f] transition hover:border-[#d9b44a]"
+            className="mt-5 flex w-full items-center justify-between gap-3 rounded-md border border-[#d9b44a]/50 bg-[#fff8df] px-3 py-3 text-left text-sm font-semibold text-[#7a5b0f] transition hover:border-[#d9b44a]"
           >
-            <span>Judge Demo Mode: load the safest 60-second query</span>
-            <Sparkles className="h-4 w-4" />
+            <span className="min-w-0 text-wrap">Judge Demo Mode: load the safest 60-second query</span>
+            <Sparkles className="h-4 w-4 shrink-0" />
           </button>
 
           <div className="mt-6 space-y-4">
             <div>
               <p className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-[#6d7a75]">Choose a category we can answer</p>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 gap-2 min-[430px]:grid-cols-2">
                 {GUIDED_CATEGORIES.map((item) => (
                   <button
                     key={item.category}
@@ -422,7 +422,7 @@ export function SourcingChat() {
           </div>
         </div>
 
-        <div className="w-[calc(100vw-40px)] min-w-0 rounded-lg border border-black/10 bg-[#16201d] p-5 text-[#f7f4ec] shadow-sm lg:w-auto">
+        <div className="w-full min-w-0 rounded-lg border border-black/10 bg-[#16201d] p-5 text-[#f7f4ec] shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#d9b44a]">Live intelligence</p>
@@ -483,7 +483,7 @@ export function SourcingChat() {
                     <div className="text-[10px] uppercase tracking-[0.16em] text-[#aeb8b3]">fit</div>
                   </div>
                 </div>
-                <div className="mt-4 grid grid-cols-4 gap-3 text-xs">
+                <div className="mt-4 grid grid-cols-2 gap-3 text-xs min-[520px]:grid-cols-4">
                   <BoardKpi label="Unit" value={formatUSD(item!.supplier.unit_price_usd)} />
                   <BoardKpi label="MOQ" value={item!.supplier.moq?.toLocaleString() ?? "TBD"} />
                   <BoardKpi label="Lead" value={`${item!.supplier.lead_time_days ?? "TBD"}d`} />
