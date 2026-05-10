@@ -52,24 +52,24 @@ export function ProfitPanel({ suppliers, inputs, onChange }: Props) {
   const update = (k: keyof ProfitInputs, v: number) => onChange({ ...inputs, [k]: v })
 
   return (
-    <section className="space-y-4">
+    <section className="rounded-lg border border-black/10 bg-white p-5 shadow-sm">
       {/* Section header. */}
-      <header className="flex flex-wrap items-end justify-between gap-3">
+      <header className="flex flex-wrap items-end justify-between gap-3 border-b border-black/10 pb-4">
         <div>
-          <p className="font-mono text-xs uppercase tracking-[0.18em] text-muted-foreground">Profit Intelligence Engine</p>
-          <h2 className="mt-1 font-serif text-2xl text-foreground">Margins, risk-adjusted profit, and badge winners</h2>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#7a5b0f]">Profit Intelligence</p>
+          <h2 className="mt-1 text-2xl font-semibold text-[#16201d]">Margin, landed cost, and risk-adjusted upside</h2>
         </div>
       </header>
 
       {/* Negative-margin warning banner. */}
       {anyNegative && (
-        <div className="rounded-xl border border-rose-500/40 bg-rose-50 px-4 py-3 text-sm text-rose-900 dark:bg-rose-950/30 dark:text-rose-200">
+        <div className="mt-4 rounded-lg border border-rose-500/40 bg-rose-50 px-4 py-3 text-sm text-rose-900 dark:bg-rose-950/30 dark:text-rose-200">
           Heads up — one or more suppliers have negative margin at your current selling price. Adjust selling price or remove them from comparison.
         </div>
       )}
 
       {/* Inputs row — 5 numeric fields. */}
-      <div className="grid grid-cols-2 gap-3 rounded-2xl border border-border/70 bg-card p-4 md:grid-cols-5">
+      <div className="mt-4 grid grid-cols-2 gap-3 rounded-lg border border-black/10 bg-[#f7f4ec] p-4 md:grid-cols-5">
         <NumberField id="selling_price" label="Selling price" suffix="$" step={0.5} value={inputs.selling_price} onChange={(v) => update("selling_price", v)} />
         <NumberField id="shipping" label="Shipping / unit" suffix="$" step={0.1} value={inputs.shipping_cost_per_unit} onChange={(v) => update("shipping_cost_per_unit", v)} />
         <NumberField id="customs" label="Customs %" suffix="%" step={0.5} value={inputs.customs_rate} onChange={(v) => update("customs_rate", v)} />
@@ -78,8 +78,8 @@ export function ProfitPanel({ suppliers, inputs, onChange }: Props) {
       </div>
 
       {/* Per-supplier rows. */}
-      <div className="overflow-hidden rounded-2xl border border-border/70 bg-card">
-        <div className="grid grid-cols-12 gap-3 border-b border-border/60 bg-secondary px-4 py-2 text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
+      <div className="mt-4 overflow-hidden rounded-lg border border-black/10 bg-white">
+        <div className="grid grid-cols-12 gap-3 border-b border-black/10 bg-[#eef1ea] px-4 py-2 text-[11px] uppercase tracking-[0.16em] text-[#6d7a75]">
           <div className="col-span-4">Supplier</div>
           <div className="col-span-2 text-right">Landed</div>
           <div className="col-span-2 text-right">Margin</div>
@@ -93,7 +93,7 @@ export function ProfitPanel({ suppliers, inputs, onChange }: Props) {
           // Margin tone — green/amber/red driven by gross_margin %.
           const marginTone = p.gross_margin > 0.4 ? "text-emerald-600" : p.gross_margin > 0.2 ? "text-amber-600" : p.gross_margin > 0 ? "text-foreground" : "text-rose-600"
           return (
-            <div key={s.id} className="grid grid-cols-12 gap-3 border-b border-border/60 px-4 py-4 last:border-b-0">
+            <div key={s.id} className="grid grid-cols-12 gap-3 border-b border-black/10 px-4 py-4 last:border-b-0">
               {/* Supplier identity + badge + AI-style explanation (deterministic). */}
               <div className="col-span-12 md:col-span-4">
                 <div className="flex flex-wrap items-center gap-2">

@@ -56,17 +56,10 @@ export default function HomePage() {
             </span>
           </Link>
           <nav className="hidden items-center gap-7 text-sm text-[#53605c] md:flex">
-            <a href="#workflow" className="hover:text-[#16201d]">Workflow</a>
+            <Link href="/app" className="hover:text-[#16201d]">Workspace</Link>
             <a href="#proof" className="hover:text-[#16201d]">Proof</a>
             <a href="#system" className="hover:text-[#16201d]">System</a>
           </nav>
-          <Button asChild className="hidden rounded-md bg-[#16201d] text-[#f7f4ec] hover:bg-[#24332f] min-[520px]:inline-flex">
-            <Link href="/app">
-              <span className="hidden sm:inline">Launch demo</span>
-              <span className="sm:hidden">Demo</span>
-              <ArrowRight className="ml-2 h-4 w-4" />
-            </Link>
-          </Button>
         </div>
       </header>
 
@@ -94,7 +87,7 @@ export default function HomePage() {
                   </Link>
                 </Button>
                 <Button asChild size="lg" variant="outline" className="h-12 rounded-md border-[#16201d]/20 bg-white/40 px-6">
-                  <a href="#workflow">See the AI workflow</a>
+                  <Link href="/app">Open the workspace</Link>
                 </Button>
               </div>
             <div className="mt-10 grid max-w-2xl grid-cols-1 divide-y divide-black/10 border-y border-black/10 bg-white/35 min-[520px]:grid-cols-3 min-[520px]:divide-x min-[520px]:divide-y-0">
@@ -169,7 +162,7 @@ export default function HomePage() {
           </div>
         </section>
 
-        <section id="workflow" className="border-b border-black/10 bg-[#fffaf0] py-24">
+        <section id="workspace" className="border-b border-black/10 bg-[#fffaf0] py-24">
           <div className="mx-auto max-w-7xl px-5 md:px-8">
             <div className="max-w-3xl">
               <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#7a5b0f]">AI Development Workflow</p>

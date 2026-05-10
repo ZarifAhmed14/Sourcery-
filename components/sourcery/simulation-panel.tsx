@@ -35,7 +35,7 @@ function buildRankChangeExplainer(prevName: string, newName: string, d: Simulati
 
 export function SimulationPanel({ suppliers, baseInputs }: Props) {
   // Drawer open state.
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState(true)
   // Local delta state — defaults match the base inputs (no change).
   const [deltas, setDeltas] = useState<SimulationDeltas>(() => defaultDeltas(baseInputs))
 
@@ -62,27 +62,27 @@ export function SimulationPanel({ suppliers, baseInputs }: Props) {
   const reset = () => setDeltas(defaultDeltas(baseInputs))
 
   return (
-    <section className="overflow-hidden rounded-2xl border border-border/70 bg-card">
+    <section className="overflow-hidden rounded-lg border border-black/10 bg-white shadow-sm">
       {/* Drawer header — click to expand. */}
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        className="flex w-full items-center justify-between gap-3 px-5 py-4 text-left"
+        className="flex w-full items-center justify-between gap-3 bg-[#16201d] px-5 py-4 text-left text-white"
       >
         <div className="flex items-center gap-3">
-          <Sparkles className="h-5 w-5 text-foreground" aria-hidden />
+          <Sparkles className="h-5 w-5 text-[#d9b44a]" aria-hidden />
           <div>
-            <p className="font-mono text-xs uppercase tracking-[0.18em] text-muted-foreground">What-If Simulation</p>
-            <h2 className="font-serif text-xl text-foreground">Stress-test shipping, lead time, and price assumptions</h2>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#d9b44a]">What-if Simulation</p>
+            <h2 className="text-xl font-semibold text-white">Stress-test shipping, lead time, and price assumptions</h2>
           </div>
         </div>
-        <ChevronDown className={cn("h-5 w-5 text-muted-foreground transition-transform", open && "rotate-180")} aria-hidden />
+        <ChevronDown className={cn("h-5 w-5 text-[#bdc8c2] transition-transform", open && "rotate-180")} aria-hidden />
       </button>
 
       {/* Body. */}
       {open && (
-        <div className="space-y-5 border-t border-border/60 px-5 py-5">
+        <div className="space-y-5 border-t border-black/10 px-5 py-5">
           {/* Five controls. */}
           <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
             <SliderRow
@@ -127,8 +127,8 @@ export function SimulationPanel({ suppliers, baseInputs }: Props) {
           )}
 
           {/* Side-by-side rank comparison. */}
-          <div className="overflow-hidden rounded-xl border border-border/60">
-            <div className="grid grid-cols-12 gap-3 border-b border-border/60 bg-secondary px-4 py-2 text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
+          <div className="overflow-hidden rounded-lg border border-black/10">
+            <div className="grid grid-cols-12 gap-3 border-b border-black/10 bg-[#eef1ea] px-4 py-2 text-[11px] uppercase tracking-[0.16em] text-[#6d7a75]">
               <div className="col-span-5">Supplier</div>
               <div className="col-span-2 text-right">Base rank</div>
               <div className="col-span-2 text-right">New rank</div>
@@ -140,7 +140,7 @@ export function SimulationPanel({ suppliers, baseInputs }: Props) {
               const prev = baseRankById.get(r.supplier_id) ?? r.profit_rank
               const moved = prev - r.profit_rank
               return (
-                <div key={r.supplier_id} className="grid grid-cols-12 items-center gap-3 border-b border-border/60 px-4 py-3 last:border-b-0">
+                <div key={r.supplier_id} className="grid grid-cols-12 items-center gap-3 border-b border-black/10 px-4 py-3 last:border-b-0">
                   <div className="col-span-5">
                     <div className="font-medium text-foreground">{supplier.name}</div>
                     <div className="text-xs text-muted-foreground">{supplier.country}</div>
@@ -162,7 +162,7 @@ export function SimulationPanel({ suppliers, baseInputs }: Props) {
 
           {/* Reset button. */}
           <div className="flex justify-end">
-            <Button variant="outline" onClick={reset} className="rounded-full bg-transparent">
+            <Button variant="outline" onClick={reset} className="rounded-lg bg-transparent">
               Reset
               <ArrowRight className="ml-1.5 h-4 w-4" />
             </Button>

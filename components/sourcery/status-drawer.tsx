@@ -56,7 +56,7 @@ export function StatusDrawer() {
         <SheetHeader className="border-b border-black/10 bg-white/80 px-6 py-5">
           <SheetTitle className="font-serif text-3xl text-[#16201d]">Demo Status</SheetTitle>
           <SheetDescription className="text-sm leading-6 text-[#5d6965]">
-            Compact proof that Sourcery&apos;s retrieval, generation, and workflow surfaces are alive without making the main workspace feel like a debug console.
+            Compact proof that Sourcery&apos;s retrieval, generation, and decision surfaces are alive without making the main workspace feel like a debug console.
           </SheetDescription>
         </SheetHeader>
 
@@ -90,13 +90,13 @@ export function StatusDrawer() {
           </div>
 
           <div className="rounded-2xl border border-black/10 bg-white p-5">
-            <h3 className="text-lg font-semibold text-[#16201d]">Show the workflow, not the plumbing</h3>
+            <h3 className="text-lg font-semibold text-[#16201d]">Show the workspace, not the plumbing</h3>
             <p className="mt-2 text-sm leading-6 text-[#5d6965]">
-              The workflow page is part of the product story. Keep it one click away from the sourcing workspace so judges can see the Discovery, Risk, Bargain, and Simulation stack clearly.
+              The workspace map is part of the product story. Keep it one click away from sourcing so judges can see the Discovery, Risk, Bargain, and Simulation stack clearly.
             </p>
             <div className="mt-4 flex flex-wrap gap-2">
               <Button asChild className="rounded-full bg-[#16201d] text-[#f7f4ec] hover:bg-[#22312d]">
-                <Link href="/app/workflow">How Sourcery Works</Link>
+                <Link href="/app/workflow">Workspace Map</Link>
               </Button>
               <Button asChild variant="outline" className="rounded-full bg-transparent">
                 <Link href="/app/health">Open technical health</Link>

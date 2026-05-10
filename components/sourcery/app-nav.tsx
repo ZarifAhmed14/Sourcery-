@@ -73,7 +73,7 @@ export function AppNav({ user }: { user: UserInfo }) {
             <Sparkles className="h-3.5 w-3.5" />
             BuildFest MVP
           </span>
-          <ButtonLink href="/app/workflow" label="How Sourcery Works" />
+          <ButtonLink href="/app/workflow" label="Workspace Map" />
           <StatusDrawer />
           {user ? (
             <form action={signOutAction}>

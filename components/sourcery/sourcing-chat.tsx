@@ -505,7 +505,7 @@ export function SourcingChat() {
               </Button>
               <Button asChild variant="outline" className="h-12 rounded-lg bg-transparent">
                 <Link href="/app/workflow">
-                  How Sourcery works
+                  Workspace map
                   <ArrowRight className="ml-2 h-4 w-4" />
                 </Link>
               </Button>
@@ -608,15 +608,16 @@ export function SourcingChat() {
                 </div>
 
                 <div className="mt-5 grid gap-2 sm:grid-cols-5">
-                  <MetricCard label="Unit price" value={formatUSD(item.supplier.unit_price_usd)} />
+                  <MetricCard label="Unit" value={formatUSD(item.supplier.unit_price_usd)} />
                   <MetricCard label="MOQ" value={item.supplier.moq.toLocaleString()} />
-                  <MetricCard label="Lead time" value={`${item.supplier.lead_time_days}d`} />
+                  <MetricCard label="Lead" value={`${item.supplier.lead_time_days}d`} />
                   <MetricCard label="Rating" value={`${(item.supplier.rating ?? item.supplier.quality_rating).toFixed(1)}/5`} />
-                  <MetricCard label="Risk" value={riskLabel(item.supplier.risk_score)} />
+                  <MetricCard label="Risk" value={riskLabel(item.supplier.risk_score)} tone={riskTone(item.supplier.risk_score)} />
                 </div>
 
                 <div className="mt-4 border-l-2 border-[#2e7d65]/40 bg-[#f7f4ec] px-4 py-3">
-                  <p className="text-sm leading-6 text-[#475450]">{item.discovery.explanation}</p>
+                  <div className="text-xs font-semibold uppercase tracking-[0.14em] text-[#2e7d65]">Why this supplier</div>
+                  <p className="mt-1 text-sm leading-6 text-[#475450]">{item.discovery.explanation}</p>
                 </div>
 
                 <div className="mt-4 flex flex-wrap gap-2">
@@ -767,11 +768,11 @@ export function SourcingChat() {
           <div className="rounded-xl border border-white/10 bg-white/[0.06] p-4 text-white">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#d9b44a]">BuildFest proof</p>
             <p className="mt-2 text-sm leading-6 text-[#bdc8c2]">
-              Workflow and health are still visible, but they now sit beside the product story instead of replacing it.
+              Workspace proof and health are still visible, but they now sit beside the product story instead of replacing it.
             </p>
             <div className="mt-4 flex flex-wrap gap-2">
               <Button asChild size="sm" className="rounded-full bg-white text-[#16201d] hover:bg-[#e8eee9]">
-                <Link href="/app/workflow">Workflow</Link>
+                <Link href="/app/workflow">Workspace map</Link>
               </Button>
               <Button asChild size="sm" variant="outline" className="rounded-full border-white/15 bg-transparent text-white hover:bg-white/10">
                 <Link href="/app/health">Health</Link>
@@ -869,9 +870,17 @@ function MetaPill({ icon: Icon, label }: { icon: typeof Database; label: string 
   )
 }
 
-function MetricCard({ label, value }: { label: string; value: string }) {
+function MetricCard({ label, value, tone = "default" }: { label: string; value: string; tone?: "default" | "low" | "medium" | "high" }) {
   return (
-    <div className="rounded-lg border border-black/10 bg-white p-3">
+    <div
+      className={cn(
+        "rounded-lg border bg-white p-3",
+        tone === "default" && "border-black/10",
+        tone === "low" && "border-emerald-200 bg-emerald-50",
+        tone === "medium" && "border-amber-200 bg-amber-50",
+        tone === "high" && "border-red-200 bg-red-50",
+      )}
+    >
       <div className="text-xs uppercase tracking-[0.16em] text-[#6d7a75]">{label}</div>
       <div className="mt-1 text-base font-semibold text-[#16201d]">{value}</div>
     </div>
@@ -931,4 +940,11 @@ function riskLabel(score?: number) {
   if (score <= 30) return `Low ${score}`
   if (score <= 60) return `Medium ${score}`
   return `High ${score}`
+}
+
+function riskTone(score?: number): "low" | "medium" | "high" {
+  if (typeof score !== "number") return "medium"
+  if (score <= 30) return "low"
+  if (score <= 60) return "medium"
+  return "high"
 }
