@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { ProfitPanel } from "@/components/sourcery/profit-panel"
 import { SimulationPanel } from "@/components/sourcery/simulation-panel"
 import { BargainDialog } from "@/components/sourcery/bargain-dialog"
-import { loadLatestResult } from "@/lib/sourcing-result-store"
+import { loadLatestResult, readShortlistIds } from "@/lib/sourcing-result-store"
 import { DEFAULT_PROFIT_INPUTS, type ProfitInputs } from "@/lib/profit"
 import type { SourcingResult } from "@/lib/sourcery/orchestrator"
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
@@ -17,20 +17,24 @@ export default function ComparePage() {
   const [result, setResult] = useState<SourcingResult | null>(null)
   const [profitInputs, setProfitInputs] = useState<ProfitInputs>(DEFAULT_PROFIT_INPUTS)
   const [exporting, setExporting] = useState(false)
+  const [shortlistIds, setShortlistIds] = useState<string[]>([])
 
   useEffect(() => {
     setResult(loadLatestResult())
+    setShortlistIds(readShortlistIds())
   }, [])
 
   const top5 = useMemo(() => {
     if (!result) return []
-    return result.discovery
+    const selected = new Set(shortlistIds)
+    const ranked = result.discovery
       .slice()
       .sort((a, b) => a.rank - b.rank)
-      .slice(0, 5)
       .map((d) => result.suppliers.find((s) => s.id === d.supplier_id)!)
       .filter(Boolean)
-  }, [result])
+    const shortlisted = ranked.filter((supplier) => selected.has(supplier.id))
+    return (shortlisted.length > 0 ? shortlisted : ranked).slice(0, 5)
+  }, [result, shortlistIds])
 
   if (!result || top5.length === 0) {
     return (

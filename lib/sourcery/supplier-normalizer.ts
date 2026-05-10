@@ -92,7 +92,8 @@ function deriveQualityRating(row: SupplierDbRow): number {
 export function normalizeSupplier(row: SupplierDbRow): Supplier {
   const products = asStringArray(row.products)
   const riskScore = asNumber(row.risk_score, 50)
-  const rating = deriveQualityRating(row)
+  const qualityRating = deriveQualityRating(row)
+  const rating = asNumber(row.rating, qualityRating)
   const retrievalScore = asNumber(row.retrieval_score ?? row.similarity, NaN)
 
   return {
@@ -103,12 +104,14 @@ export function normalizeSupplier(row: SupplierDbRow): Supplier {
     region: normalizeRegion(row.region),
     category: normalizeCategory(row.category),
     subcategory: deriveSubcategory(row, products),
+    products,
     description: asString(row.description, "Supplier profile"),
     unit_price_usd: asNumber(row.unit_price_usd, 0),
     moq: asNumber(row.moq, 1),
     lead_time_days: asNumber(row.lead_time_days, 1),
+    rating,
     on_time_rate: deriveOnTimeRate(row, riskScore),
-    quality_rating: rating,
+    quality_rating: qualityRating,
     risk_score: riskScore,
     risk_level: asString(row.risk_level, "medium") as Supplier["risk_level"],
     risk_notes: asString(row.risk_notes) || null,

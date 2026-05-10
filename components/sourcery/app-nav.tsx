@@ -4,19 +4,17 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { Activity, Database, LogOut } from "lucide-react"
+import { LogOut, Sparkles } from "lucide-react"
 import { BangladeshToggle } from "@/components/sourcery/bangladesh-toggle"
+import { StatusDrawer } from "@/components/sourcery/status-drawer"
 import { usePreferences } from "@/lib/preferences-context"
 import { signOutAction } from "@/lib/sourcery/actions"
 import { cn } from "@/lib/utils"
 
-// Static link list — Source (chat), Compare (scorecard + profit), Recent (history).
 const LINKS = [
-  { href: "/app", label: "Source" },
-  { href: "/app/compare", label: "Compare" },
-  { href: "/app/dashboard", label: "Recent" },
-  { href: "/app/workflow", label: "Workflow" },
-  { href: "/app/health", label: "Health" },
+  { href: "/app", label: "Sourcing" },
+  { href: "/app/directory", label: "Supplier Directory" },
+  { href: "/app/dashboard", label: "Saved Searches" },
 ]
 
 // Tiny user shape — kept narrow on purpose so we don't ship full auth payloads to the client.
@@ -56,7 +54,9 @@ export function AppNav({ user }: { user: UserInfo }) {
               href={l.href}
               className={cn(
                 "shrink-0 rounded-md px-3 py-1.5 text-sm transition-colors",
-                pathname === l.href ? "bg-[#16201d] text-[#f7f4ec]" : "text-[#6d7a75] hover:text-[#16201d]",
+                pathname === l.href || (l.href !== "/app" && pathname.startsWith(l.href))
+                  ? "bg-[#16201d] text-[#f7f4ec]"
+                  : "text-[#6d7a75] hover:text-[#16201d]",
               )}
             >
               {l.label}
@@ -69,16 +69,13 @@ export function AppNav({ user }: { user: UserInfo }) {
           <div className="hidden sm:block">
             <BangladeshToggle />
           </div>
-          <span className="hidden items-center gap-1.5 rounded-md border border-black/10 bg-white/55 px-2.5 py-1 text-xs font-medium text-[#2e7d65] lg:inline-flex">
-            <Activity className="h-3.5 w-3.5" />
-            Live
+          <span className="hidden items-center gap-1.5 rounded-full border border-black/10 bg-[#fff8df] px-3 py-1 text-xs font-medium text-[#7a5b0f] lg:inline-flex">
+            <Sparkles className="h-3.5 w-3.5" />
+            BuildFest MVP
           </span>
-          <span className="hidden items-center gap-1.5 rounded-md border border-black/10 bg-white/55 px-2.5 py-1 text-xs font-medium text-[#6d7a75] lg:inline-flex">
-            <Database className="h-3.5 w-3.5" />
-            API
-          </span>
+          <ButtonLink href="/app/workflow" label="How Sourcery Works" />
+          <StatusDrawer />
           {user ? (
-            // Signed in — show a server-action sign-out form (no JS state required).
             <form action={signOutAction}>
               <button
                 type="submit"
@@ -101,5 +98,16 @@ export function AppNav({ user }: { user: UserInfo }) {
         </div>
       </div>
     </header>
+  )
+}
+
+function ButtonLink({ href, label }: { href: string; label: string }) {
+  return (
+    <Link
+      href={href}
+      className="hidden rounded-full border border-black/10 bg-white/70 px-3 py-2 text-sm font-medium text-[#1f2f2a] transition-colors hover:bg-white sm:inline-block"
+    >
+      {label}
+    </Link>
   )
 }

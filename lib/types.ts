@@ -28,10 +28,12 @@ export type Supplier = {
   region: SupplierRegion
   category: SupplierCategory
   subcategory: string
+  products?: string[]
   description: string
   unit_price_usd: number
   moq: number
   lead_time_days: number
+  rating?: number
   on_time_rate: number
   quality_rating: number
   risk_score: number

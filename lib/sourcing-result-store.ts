@@ -8,6 +8,7 @@ import type { SupplierCategory } from "@/lib/types"
 // Storage keys — namespaced under sourcery.* so they don't collide with anything else.
 const LATEST_KEY = "sourcery.latest_result.v1"
 const RECENT_KEY = "sourcery.recent_queries.v1"
+const SHORTLIST_KEY = "sourcery.shortlist_ids.v1"
 
 // Stable summary shape used for the recent searches list.
 export type RecentQuery = {
@@ -70,6 +71,26 @@ export function readRecentQueries(): RecentQuery[] {
     return raw ? (JSON.parse(raw) as RecentQuery[]) : []
   } catch (err) {
     console.log("[v0] readRecentQueries error:", (err as Error).message)
+    return []
+  }
+}
+
+export function saveShortlistIds(ids: string[]): void {
+  try {
+    if (typeof window === "undefined") return
+    window.localStorage.setItem(SHORTLIST_KEY, JSON.stringify(ids.slice(0, 4)))
+  } catch (err) {
+    console.log("[v0] saveShortlistIds error:", (err as Error).message)
+  }
+}
+
+export function readShortlistIds(): string[] {
+  try {
+    if (typeof window === "undefined") return []
+    const raw = window.localStorage.getItem(SHORTLIST_KEY)
+    return raw ? (JSON.parse(raw) as string[]) : []
+  } catch (err) {
+    console.log("[v0] readShortlistIds error:", (err as Error).message)
     return []
   }
 }
