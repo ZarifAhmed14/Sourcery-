@@ -360,27 +360,27 @@ export function SourcingChat() {
 
   return (
     <div className="space-y-6">
-      <section className="grid gap-5 xl:grid-cols-[300px_minmax(0,1fr)_340px]">
-        <aside className="space-y-4 rounded-3xl border border-black/10 bg-white p-5 shadow-sm">
-          <div className="flex items-start justify-between gap-3">
+      <section className="grid gap-5 xl:grid-cols-[260px_minmax(0,1fr)_320px]">
+        <aside className="space-y-5 rounded-xl border border-black/10 bg-white/80 p-4 shadow-sm">
+          <div className="flex items-start justify-between gap-3 border-b border-black/10 pb-4">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#6d7a75]">Sourcing workspace</p>
-              <h1 className="mt-2 text-2xl font-semibold text-[#16201d]">Guided filters</h1>
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#6d7a75]">Filters</p>
+              <h1 className="mt-1 text-xl font-semibold text-[#16201d]">Buyer controls</h1>
             </div>
             <Button
               type="button"
               onClick={runJudgeDemo}
               variant="outline"
-              className="rounded-full border-[#d9b44a]/40 bg-[#fff8df] text-[#7a5b0f] hover:bg-[#fff3bf]"
+              className="h-9 rounded-full border-[#d9b44a]/40 bg-[#fff8df] px-3 text-xs text-[#7a5b0f] hover:bg-[#fff3bf]"
             >
               <Sparkles className="mr-1.5 h-4 w-4" />
-              Demo mode
+              Demo
             </Button>
           </div>
 
-          <div className="rounded-2xl border border-black/10 bg-[#f7f4ec] p-4">
-            <div className="text-xs font-semibold uppercase tracking-[0.16em] text-[#6d7a75]">Category</div>
-            <div className="mt-3 grid gap-2">
+          <div>
+            <div className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-[#6d7a75]">Category</div>
+            <div className="grid gap-1.5">
               {SUPPORTED_PRODUCT_CATALOG.map((item) => (
                 <button
                   key={item.category}
@@ -391,14 +391,14 @@ export function SourcingChat() {
                     setQuery(`${item.products[0]} suppliers, low MOQ, export-ready, certification preferred`)
                   }}
                   className={cn(
-                    "rounded-2xl border px-3 py-3 text-left text-sm transition",
+                    "rounded-lg border px-3 py-2.5 text-left text-sm transition",
                     selectedCategory === item.category
-                      ? "border-[#2e7d65] bg-[#edf6f1] text-[#165c49]"
-                      : "border-black/10 bg-white text-[#53605c] hover:text-[#16201d]",
+                      ? "border-[#2e7d65] bg-[#edf6f1] text-[#165c49] shadow-sm"
+                      : "border-transparent bg-transparent text-[#53605c] hover:bg-[#f7f4ec] hover:text-[#16201d]",
                   )}
                 >
                   <div className="font-medium">{item.label}</div>
-                  <div className="mt-1 text-xs text-[#6d7a75]">{item.products.slice(0, 2).join(" • ")}</div>
+                  <div className="mt-1 text-xs text-[#6d7a75]">{item.products.slice(0, 2).join(" / ")}</div>
                 </button>
               ))}
             </div>
@@ -408,7 +408,7 @@ export function SourcingChat() {
             <select
               value={selectedProduct}
               onChange={(event) => setSelectedProduct(event.target.value)}
-              className="h-11 w-full rounded-2xl border border-black/10 bg-white px-3 text-sm outline-none"
+              className="h-11 w-full rounded-lg border border-black/10 bg-white px-3 text-sm outline-none"
             >
               {SUPPORTED_PRODUCT_CATALOG.find((item) => item.category === selectedCategory)?.products.map((product) => (
                 <option key={product} value={product}>
@@ -422,7 +422,7 @@ export function SourcingChat() {
             <select
               value={selectedCountry}
               onChange={(event) => setSelectedCountry(event.target.value)}
-              className="h-11 w-full rounded-2xl border border-black/10 bg-white px-3 text-sm outline-none"
+              className="h-11 w-full rounded-lg border border-black/10 bg-white px-3 text-sm outline-none"
             >
               {COUNTRY_OPTIONS.map((country) => (
                 <option key={country} value={country}>
@@ -436,7 +436,7 @@ export function SourcingChat() {
             <select
               value={selectedRegion}
               onChange={(event) => setSelectedRegion(event.target.value as SupplierRegion | "any")}
-              className="h-11 w-full rounded-2xl border border-black/10 bg-white px-3 text-sm outline-none"
+              className="h-11 w-full rounded-lg border border-black/10 bg-white px-3 text-sm outline-none"
             >
               {REGION_OPTIONS.map((option) => (
                 <option key={option.value} value={option.value}>
@@ -451,7 +451,7 @@ export function SourcingChat() {
           <RangeField label="Top K results" value={topK} min={3} max={6} suffix="" onChange={setTopK} />
 
           {bangladeshMode && (
-            <div className="rounded-2xl border border-[#2e7d65]/15 bg-[#edf6f1] p-4 text-sm text-[#165c49]">
+            <div className="rounded-xl border border-[#2e7d65]/15 bg-[#edf6f1] p-4 text-sm text-[#165c49]">
               <div className="font-semibold">Bangladesh Mode active</div>
               <p className="mt-1 leading-6">
                 Bangladesh Mode softly prioritizes South Asian sourcing context and highlights Bangla negotiation support.
@@ -460,11 +460,13 @@ export function SourcingChat() {
           )}
         </aside>
 
-        <section className="space-y-4 rounded-3xl border border-black/10 bg-white p-5 shadow-sm">
-          <div className="flex flex-wrap items-start justify-between gap-4">
+        <section className="space-y-5 rounded-xl border border-black/10 bg-white p-5 shadow-sm md:p-6">
+          <WorkflowStrip />
+
+          <div className="flex flex-wrap items-start justify-between gap-4 border-b border-black/10 pb-5">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#6d7a75]">Sourcing brief</p>
-              <h2 className="mt-2 text-3xl font-semibold text-[#16201d]">Ranked supplier board</h2>
+              <h2 className="mt-2 text-4xl font-semibold tracking-tight text-[#16201d]">Find the best supplier path.</h2>
               <p className="mt-2 max-w-2xl text-sm leading-6 text-[#5d6965]">
                 Start with a supported category, sharpen your product brief, and let Sourcery rank suppliers by fit, cost,
                 lead time, and sourcing risk.
@@ -482,12 +484,12 @@ export function SourcingChat() {
               onChange={(event) => setQuery(event.target.value)}
               rows={5}
               disabled={status === "loading"}
-              className="resize-none rounded-3xl border-[#d9ded8] bg-[#fbfaf6] text-base leading-7 shadow-none focus-visible:ring-[#2e7d65]"
+              className="resize-none rounded-xl border-[#d9ded8] bg-[#fbfaf6] text-base leading-7 shadow-none focus-visible:ring-[#2e7d65]"
               placeholder="Describe the supplier you need: product, MOQ, price target, lead time, and preferred certifications."
             />
 
             {mismatchWarning && (
-              <div className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+              <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
                 <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
                 <p>{mismatchWarning}</p>
               </div>
@@ -496,12 +498,12 @@ export function SourcingChat() {
             <div className="flex flex-wrap items-center gap-3">
               <Button
                 disabled={status === "loading" || query.trim().length < 2}
-                className="h-12 rounded-full bg-[#16201d] px-5 text-[#f7f4ec] hover:bg-[#24332f]"
+                className="h-12 rounded-lg bg-[#16201d] px-5 text-[#f7f4ec] hover:bg-[#24332f]"
               >
                 {status === "loading" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Search className="mr-2 h-4 w-4" />}
                 Run supplier intelligence
               </Button>
-              <Button asChild variant="outline" className="h-12 rounded-full bg-transparent">
+              <Button asChild variant="outline" className="h-12 rounded-lg bg-transparent">
                 <Link href="/app/workflow">
                   How Sourcery works
                   <ArrowRight className="ml-2 h-4 w-4" />
@@ -511,7 +513,7 @@ export function SourcingChat() {
           </form>
 
           {status === "loading" && (
-            <div className="rounded-3xl border border-[#2e7d65]/15 bg-[#edf6f1] p-4 text-sm text-[#165c49]">
+            <div className="rounded-xl border border-[#2e7d65]/15 bg-[#edf6f1] p-4 text-sm text-[#165c49]">
               <div className="flex items-center gap-2 font-semibold">
                 <Loader2 className="h-4 w-4 animate-spin" />
                 {LOADING_STEPS[loadingStep]}
@@ -526,7 +528,7 @@ export function SourcingChat() {
           )}
 
           {status === "error" && error && (
-            <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
+            <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
           )}
 
           {result && (
@@ -578,16 +580,16 @@ export function SourcingChat() {
               <article
                 key={item.supplier.id}
                 className={cn(
-                  "rounded-3xl border p-5 transition",
+                  "rounded-xl border p-5 transition",
                   selectedSupplier?.id === item.supplier.id
-                    ? "border-[#2e7d65]/35 bg-[#f7fbf9] shadow-sm"
-                    : "border-black/10 bg-[#fbfaf6]",
+                    ? "border-[#2e7d65]/40 bg-[#f7fbf9] shadow-sm"
+                    : "border-black/10 bg-white hover:border-[#2e7d65]/25 hover:shadow-sm",
                 )}
               >
                 <div className="flex flex-wrap items-start justify-between gap-4">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="rounded-full bg-[#16201d] px-2.5 py-1 text-xs font-semibold text-white">#{item.discovery.rank}</span>
+                      <span className="rounded-md bg-[#16201d] px-2.5 py-1 text-xs font-semibold text-white">#{item.discovery.rank}</span>
                       <h3 className="text-xl font-semibold text-[#16201d]">{item.supplier.name}</h3>
                       {item.supplier.bgmea_certified && <BadgeTag label="BGMEA" tone="green" />}
                       {item.supplier.source_type === "public_web" && <BadgeTag label="Public profile" tone="slate" />}
@@ -595,7 +597,7 @@ export function SourcingChat() {
                     <p className="mt-2 flex flex-wrap items-center gap-2 text-sm text-[#5d6965]">
                       <MapPin className="h-4 w-4 text-[#2e7d65]" />
                       {item.supplier.city}, {item.supplier.country}
-                      <span className="text-[#9ba49f]">•</span>
+                      <span className="text-[#9ba49f]">/</span>
                       <span className="capitalize">{item.supplier.category}</span>
                     </p>
                   </div>
@@ -605,7 +607,7 @@ export function SourcingChat() {
                   </div>
                 </div>
 
-                <div className="mt-5 grid gap-3 sm:grid-cols-5">
+                <div className="mt-5 grid gap-2 sm:grid-cols-5">
                   <MetricCard label="Unit price" value={formatUSD(item.supplier.unit_price_usd)} />
                   <MetricCard label="MOQ" value={item.supplier.moq.toLocaleString()} />
                   <MetricCard label="Lead time" value={`${item.supplier.lead_time_days}d`} />
@@ -613,7 +615,7 @@ export function SourcingChat() {
                   <MetricCard label="Risk" value={riskLabel(item.supplier.risk_score)} />
                 </div>
 
-                <div className="mt-4 rounded-2xl border border-black/10 bg-white p-4">
+                <div className="mt-4 border-l-2 border-[#2e7d65]/40 bg-[#f7f4ec] px-4 py-3">
                   <p className="text-sm leading-6 text-[#475450]">{item.discovery.explanation}</p>
                 </div>
 
@@ -634,7 +636,7 @@ export function SourcingChat() {
                       type="button"
                       variant="outline"
                       onClick={() => toggleShortlist(item.supplier.id)}
-                      className="rounded-full bg-transparent"
+                      className="rounded-lg bg-transparent"
                     >
                       {shortlist.includes(item.supplier.id) ? "Shortlisted" : "Shortlist"}
                     </Button>
@@ -642,7 +644,7 @@ export function SourcingChat() {
                       type="button"
                       variant="outline"
                       onClick={() => setSelectedId(item.supplier.id)}
-                      className="rounded-full bg-transparent"
+                      className="rounded-lg bg-transparent"
                     >
                       Open detail
                       <ChevronRight className="ml-1.5 h-4 w-4" />
@@ -654,33 +656,33 @@ export function SourcingChat() {
           </div>
         </section>
 
-        <aside className="space-y-4 rounded-3xl border border-black/10 bg-white p-5 shadow-sm">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#6d7a75]">Shortlist</p>
+        <aside className="space-y-4 rounded-xl border border-black/10 bg-[#16201d] p-5 text-white shadow-sm">
+          <div className="border-b border-white/10 pb-4">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#d9b44a]">Decision basket</p>
             <div className="mt-2 flex items-center justify-between gap-3">
-              <h2 className="text-2xl font-semibold text-[#16201d]">{shortlistSuppliers.length}/4 selected</h2>
-              <Button asChild className="rounded-full bg-[#16201d] text-[#f7f4ec] hover:bg-[#24332f]">
+              <h2 className="text-2xl font-semibold text-white">{shortlistSuppliers.length}/4 selected</h2>
+              <Button asChild className="rounded-lg bg-white text-[#16201d] hover:bg-[#e8eee9]">
                 <Link href="/app/compare">Compare selected</Link>
               </Button>
             </div>
-            <p className="mt-2 text-sm leading-6 text-[#5d6965]">{shortlistSummary}</p>
+            <p className="mt-2 text-sm leading-6 text-[#bdc8c2]">{shortlistSummary}</p>
           </div>
 
           <div className="space-y-3">
             {shortlistSuppliers.length > 0 ? (
               shortlistSuppliers.map((supplier) => (
-                <div key={supplier.id} className="rounded-2xl border border-black/10 bg-[#f7f4ec] p-4">
+                <div key={supplier.id} className="rounded-lg border border-white/10 bg-white/[0.06] p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <div className="font-medium text-[#16201d]">{supplier.name}</div>
-                      <div className="mt-1 text-sm text-[#6d7a75]">
-                        {supplier.country} • {formatUSD(supplier.unit_price_usd)}
+                      <div className="font-medium text-white">{supplier.name}</div>
+                      <div className="mt-1 text-sm text-[#bdc8c2]">
+                        {supplier.country} / {formatUSD(supplier.unit_price_usd)}
                       </div>
                     </div>
                     <button
                       type="button"
                       onClick={() => toggleShortlist(supplier.id)}
-                      className="text-xs font-medium text-[#7a5b0f]"
+                      className="text-xs font-medium text-[#d9b44a]"
                     >
                       Remove
                     </button>
@@ -688,14 +690,14 @@ export function SourcingChat() {
                 </div>
               ))
             ) : (
-              <div className="rounded-2xl border border-dashed border-black/15 px-4 py-6 text-sm leading-6 text-[#6d7a75]">
+              <div className="rounded-lg border border-dashed border-white/20 px-4 py-6 text-sm leading-6 text-[#bdc8c2]">
                 Add suppliers from the ranked board so we can compare them side by side and run profit intelligence.
               </div>
             )}
           </div>
 
           {selectedSupplier ? (
-            <div className="rounded-3xl border border-black/10 bg-[#fbfaf6] p-4">
+            <div className="rounded-xl border border-white/10 bg-white p-4 text-[#16201d]">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#6d7a75]">Supplier profile</p>
@@ -721,18 +723,18 @@ export function SourcingChat() {
                   type="button"
                   onClick={runBargain}
                   disabled={bargainLoading}
-                  className="rounded-full bg-[#16201d] text-[#f7f4ec] hover:bg-[#24332f]"
+                  className="rounded-lg bg-[#16201d] text-[#f7f4ec] hover:bg-[#24332f]"
                 >
                   {bargainLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <MessageSquareText className="mr-2 h-4 w-4" />}
                   Bargain message
                 </Button>
-                <Button asChild variant="outline" className="rounded-full bg-transparent">
+                <Button asChild variant="outline" className="rounded-lg bg-transparent">
                   <Link href={`/app/suppliers/${selectedSupplier.id}`}>
                     Open full profile
                     <ArrowRight className="ml-2 h-4 w-4" />
                   </Link>
                 </Button>
-                <Button asChild variant="outline" className="rounded-full bg-transparent">
+                <Button asChild variant="outline" className="rounded-lg bg-transparent">
                   <Link href="/app/compare">
                     <BarChart3 className="mr-2 h-4 w-4" />
                     Profit & simulation
@@ -741,13 +743,13 @@ export function SourcingChat() {
               </div>
 
               {bargain && (
-                <div className="mt-4 rounded-2xl border border-black/10 bg-white p-4">
+                <div className="mt-4 rounded-lg border border-black/10 bg-[#f7f4ec] p-4">
                   <div className="flex items-center justify-between gap-3">
                     <div>
                       <div className="text-sm font-semibold text-[#16201d]">Bangla bargain draft</div>
                       <div className="text-xs text-[#6d7a75]">{bargain.meta.llm_mode}</div>
                     </div>
-                    <Button type="button" variant="outline" onClick={copyBargain} className="rounded-full bg-transparent">
+                    <Button type="button" variant="outline" onClick={copyBargain} className="rounded-lg bg-transparent">
                       <Copy className="mr-1.5 h-4 w-4" />
                       Copy
                     </Button>
@@ -757,12 +759,12 @@ export function SourcingChat() {
               )}
             </div>
           ) : (
-            <div className="rounded-2xl border border-dashed border-black/15 px-4 py-10 text-center text-sm text-[#6d7a75]">
+            <div className="rounded-lg border border-dashed border-white/20 px-4 py-10 text-center text-sm text-[#bdc8c2]">
               Pick a supplier to inspect the full profile.
             </div>
           )}
 
-          <div className="rounded-2xl border border-black/10 bg-[#16201d] p-4 text-white">
+          <div className="rounded-xl border border-white/10 bg-white/[0.06] p-4 text-white">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#d9b44a]">BuildFest proof</p>
             <p className="mt-2 text-sm leading-6 text-[#bdc8c2]">
               Workflow and health are still visible, but they now sit beside the product story instead of replacing it.
@@ -787,6 +789,37 @@ function FilterGroup({ label, children }: { label: string; children: React.React
     <div>
       <div className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-[#6d7a75]">{label}</div>
       {children}
+    </div>
+  )
+}
+
+function WorkflowStrip() {
+  const steps = [
+    ["Discovery", "Find matches"],
+    ["Risk", "Check tradeoffs"],
+    ["Bargain", "Draft outreach"],
+    ["Simulation", "Stress-test profit"],
+  ]
+
+  return (
+    <div className="rounded-xl border border-black/10 bg-[#16201d] p-3 text-white">
+      <div className="grid gap-2 sm:grid-cols-4">
+        {steps.map(([name, detail], index) => (
+          <Link
+            key={name}
+            href="/app/workflow"
+            className="group flex items-center gap-3 rounded-lg px-2 py-2 transition hover:bg-white/10"
+          >
+            <span className="grid h-7 w-7 shrink-0 place-items-center rounded-md bg-[#d9b44a] text-xs font-semibold text-[#16201d]">
+              {index + 1}
+            </span>
+            <span className="min-w-0">
+              <span className="block text-sm font-semibold leading-5">{name}</span>
+              <span className="block truncate text-xs text-[#bdc8c2]">{detail}</span>
+            </span>
+          </Link>
+        ))}
+      </div>
     </div>
   )
 }
@@ -838,7 +871,7 @@ function MetaPill({ icon: Icon, label }: { icon: typeof Database; label: string 
 
 function MetricCard({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-2xl border border-black/10 bg-white p-3">
+    <div className="rounded-lg border border-black/10 bg-white p-3">
       <div className="text-xs uppercase tracking-[0.16em] text-[#6d7a75]">{label}</div>
       <div className="mt-1 text-base font-semibold text-[#16201d]">{value}</div>
     </div>
@@ -877,7 +910,7 @@ function RiskBadge({ score }: { score?: number }) {
 
 function DetailRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-2xl border border-black/10 bg-white p-3">
+    <div className="rounded-lg border border-black/10 bg-white p-3">
       <div className="text-xs uppercase tracking-[0.16em] text-[#6d7a75]">{label}</div>
       <div className="mt-1 text-sm leading-6 text-[#16201d]">{value}</div>
     </div>
