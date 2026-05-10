@@ -49,6 +49,16 @@ Required screens and sections:
    - Show Supabase status, AI generation provider, embedding provider, and free-provider state in a tasteful debug panel.
    - This is for judges/demo operators, not a giant user-facing explanation.
 
+7. **Saved Searches / Run History**
+   - Include a compact run-history panel so buyers can revisit recent sourcing briefs, shortlisted suppliers, and comparison outcomes.
+   - For unauthenticated/guest use, store recent runs in frontend state/localStorage.
+   - Do not invent a saved-search API route. The backend database has a `saved_searches` table for the authenticated app path, but this frontend should only call documented routes unless a saved-search endpoint is added later.
+   - Make this feel like product memory: "Recent runs", "Saved shortlist", "Last comparison", "Resume".
+
+8. **Observability Signals**
+   - Surface backend metadata in a small operator/debug view: cache status, retrieval mode, LLM mode, AI provider, elapsed time, confidence, and health status.
+   - Treat cache/telemetry as software features that support demo reliability, not as user-facing clutter.
+
 API response expectations:
 
 - `/api/source` returns `{ suppliers, discovery, risk, comparison, meta }`.
@@ -61,6 +71,7 @@ API response expectations:
 Interaction details:
 
 - Use optimistic but honest loading states.
+- Include saved-search and recent-run UX; use localStorage for guests if no auth endpoint is available.
 - Never expose secret keys or require users to paste API keys.
 - Do not connect directly to Supabase from the frontend.
 - Keep API functions centralized in one client file so the backend can be swapped without rewriting UI.

@@ -1,6 +1,14 @@
 import { generateText, Output } from "ai"
 import type { ZodType } from "zod"
-import { getAiGenerationProvider, getBargainModel, getPollinationsBaseUrl, getPollinationsModel, getReasoningModel } from "@/lib/env"
+import {
+  getAiGenerationProvider,
+  getBargainModel,
+  getGeminiApiKey,
+  getGeminiModel,
+  getPollinationsBaseUrl,
+  getPollinationsModel,
+  getReasoningModel,
+} from "@/lib/env"
 
 type PollinationsMessage = {
   role: "system" | "user" | "assistant"
@@ -22,7 +30,7 @@ type PollinationsChatResponse = {
   }
 }
 
-export type AiGenerationProvider = "ai_sdk" | "pollinations" | "none"
+export type AiGenerationProvider = "ai_sdk" | "gemini" | "pollinations" | "none"
 
 export type StructuredGenerationResult<T> = {
   output: T
@@ -133,6 +141,61 @@ function tryParsePollinationsBody(rawBody: string): PollinationsChatResponse {
   }
 }
 
+async function callGemini(args: {
+  system?: string
+  prompt: string
+  maxTokens: number
+  jsonMode?: boolean
+}): Promise<string> {
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${getGeminiModel()}:generateContent?key=${encodeURIComponent(getGeminiApiKey())}`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        systemInstruction: args.system
+          ? {
+              parts: [{ text: args.system }],
+            }
+          : undefined,
+        contents: [
+          {
+            role: "user",
+            parts: [{ text: args.prompt }],
+          },
+        ],
+        generationConfig: {
+          temperature: 0.2,
+          maxOutputTokens: args.maxTokens,
+          responseMimeType: args.jsonMode ? "application/json" : undefined,
+        },
+      }),
+    },
+  )
+
+  const rawBody = await response.text()
+  let body: {
+    candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>
+    error?: { message?: string }
+  }
+
+  try {
+    body = JSON.parse(rawBody)
+  } catch {
+    throw new Error(`Gemini returned non-JSON response: ${rawBody.slice(0, 240)}`)
+  }
+
+  if (!response.ok) {
+    throw new Error(body.error?.message ?? `Gemini request failed (${response.status})`)
+  }
+
+  const text = body.candidates?.[0]?.content?.parts?.map((part) => part.text ?? "").join("").trim()
+  if (!text) throw new Error("Gemini returned no text")
+  return text
+}
+
 export async function generateStructuredObject<T>(args: {
   schema: ZodType<T>
   system: string
@@ -155,6 +218,16 @@ export async function generateStructuredObject<T>(args: {
     })
     if (!output) throw new Error("AI SDK returned no structured output")
     return { output: output as T, provider }
+  }
+
+  if (provider === "gemini") {
+    const text = await callGemini({
+      system: `${args.system}\n\nReturn strict JSON only. Do not include markdown, prose, comments, or code fences.`,
+      prompt: args.prompt,
+      maxTokens: args.maxOutputTokens,
+      jsonMode: true,
+    })
+    return { output: parseStructuredResponse(args.schema, text), provider }
   }
 
   const messages: PollinationsMessage[] = [
@@ -208,6 +281,14 @@ export async function generatePlainText(args: {
       maxOutputTokens: args.maxOutputTokens,
     })
     return { text: result.text.trim(), provider }
+  }
+
+  if (provider === "gemini") {
+    const text = await callGemini({
+      prompt: args.prompt,
+      maxTokens: args.maxOutputTokens,
+    })
+    return { text: text.trim(), provider }
   }
 
   const text = await callPollinations(

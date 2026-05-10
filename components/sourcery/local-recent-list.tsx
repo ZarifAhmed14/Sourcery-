@@ -61,6 +61,18 @@ export function LocalRecentList() {
               <span>{new Date(r.ts).toLocaleString()}</span>
               <span>·</span>
               <span>{r.count} suppliers</span>
+              {r.product && (
+                <>
+                  <span>·</span>
+                  <span>{r.product}</span>
+                </>
+              )}
+              {r.confidence && (
+                <>
+                  <span>·</span>
+                  <span className="capitalize">{r.confidence} confidence</span>
+                </>
+              )}
               {r.bangladeshMode && (
                 <>
                   <span>·</span>

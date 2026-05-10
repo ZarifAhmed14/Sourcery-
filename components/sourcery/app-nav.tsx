@@ -4,7 +4,7 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { LogOut } from "lucide-react"
+import { Activity, Database, LogOut } from "lucide-react"
 import { BangladeshToggle } from "@/components/sourcery/bangladesh-toggle"
 import { usePreferences } from "@/lib/preferences-context"
 import { signOutAction } from "@/lib/sourcery/actions"
@@ -15,6 +15,8 @@ const LINKS = [
   { href: "/app", label: "Source" },
   { href: "/app/compare", label: "Compare" },
   { href: "/app/dashboard", label: "Recent" },
+  { href: "/app/workflow", label: "Workflow" },
+  { href: "/app/health", label: "Health" },
 ]
 
 // Tiny user shape — kept narrow on purpose so we don't ship full auth payloads to the client.
@@ -30,26 +32,31 @@ export function AppNav({ user }: { user: UserInfo }) {
     // The orange left border is the visual signal that BD mode is on globally.
     <header
       className={cn(
-        "sticky top-0 z-30 w-full border-b border-border/60 bg-background/80 backdrop-blur",
-        bangladeshMode && "border-l-4 border-l-[#f97316]",
+        "sticky top-0 z-30 w-full border-b border-black/10 bg-[#f7f4ec]/86 backdrop-blur-xl",
+        bangladeshMode && "border-l-4 border-l-[#2e7d65]",
       )}
     >
-      <div className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between gap-6 px-6 md:px-10">
+      <div className="mx-auto flex min-h-16 w-full max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-3 md:flex-nowrap md:px-8">
         {/* Brand mark — links back to landing page. */}
-        <Link href="/" className="flex items-center gap-2">
-          <span className="font-serif text-xl italic tracking-tight">Sourcery</span>
-          <span className="hidden text-xs uppercase tracking-[0.18em] text-muted-foreground sm:inline">Sourcing OS</span>
+        <Link href="/" className="flex shrink-0 items-center gap-3">
+          <span className="grid h-9 w-9 place-items-center rounded-md bg-[#16201d] text-xs font-black text-[#f7f4ec]">
+            SQ
+          </span>
+          <span className="hidden min-[520px]:block">
+            <span className="block text-sm font-semibold tracking-[0.22em] text-[#16201d]">SOURCERY</span>
+            <span className="hidden text-[10px] uppercase tracking-[0.18em] text-[#6d7a75] sm:block">Supplier intelligence</span>
+          </span>
         </Link>
 
         {/* Primary route links. */}
-        <nav className="flex items-center gap-1 sm:gap-3">
+        <nav className="order-3 flex w-full min-w-0 items-center gap-1 overflow-x-auto md:order-none md:w-auto md:gap-3">
           {LINKS.map((l) => (
             <Link
               key={l.href}
               href={l.href}
               className={cn(
-                "rounded-full px-3 py-1.5 text-sm transition-colors",
-                pathname === l.href ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground",
+                "shrink-0 rounded-md px-3 py-1.5 text-sm transition-colors",
+                pathname === l.href ? "bg-[#16201d] text-[#f7f4ec]" : "text-[#6d7a75] hover:text-[#16201d]",
               )}
             >
               {l.label}
@@ -58,14 +65,24 @@ export function AppNav({ user }: { user: UserInfo }) {
         </nav>
 
         {/* Right cluster — BD toggle + auth state. */}
-        <div className="flex items-center gap-2 md:gap-4">
-          <BangladeshToggle />
+        <div className="flex shrink-0 items-center gap-2 md:gap-4">
+          <div className="hidden sm:block">
+            <BangladeshToggle />
+          </div>
+          <span className="hidden items-center gap-1.5 rounded-md border border-black/10 bg-white/55 px-2.5 py-1 text-xs font-medium text-[#2e7d65] lg:inline-flex">
+            <Activity className="h-3.5 w-3.5" />
+            Live
+          </span>
+          <span className="hidden items-center gap-1.5 rounded-md border border-black/10 bg-white/55 px-2.5 py-1 text-xs font-medium text-[#6d7a75] lg:inline-flex">
+            <Database className="h-3.5 w-3.5" />
+            API
+          </span>
           {user ? (
             // Signed in — show a server-action sign-out form (no JS state required).
             <form action={signOutAction}>
               <button
                 type="submit"
-                className="hidden items-center gap-1.5 rounded-full border border-border/70 px-3 py-1 text-xs uppercase tracking-[0.16em] text-muted-foreground transition-colors hover:text-foreground sm:inline-flex"
+                className="hidden items-center gap-1.5 rounded-md border border-black/10 px-3 py-1 text-xs uppercase tracking-[0.16em] text-[#6d7a75] transition-colors hover:text-[#16201d] sm:inline-flex"
                 aria-label="Sign out"
               >
                 <LogOut className="h-3.5 w-3.5" />
@@ -76,7 +93,7 @@ export function AppNav({ user }: { user: UserInfo }) {
             // Signed out — link to the auth flow.
             <Link
               href="/auth/login"
-              className="hidden rounded-full border border-border/70 px-3 py-1 text-xs uppercase tracking-[0.16em] text-muted-foreground transition-colors hover:text-foreground sm:inline-block"
+              className="hidden rounded-md border border-black/10 px-3 py-1 text-xs uppercase tracking-[0.16em] text-[#6d7a75] transition-colors hover:text-[#16201d] sm:inline-block"
             >
               Sign in
             </Link>

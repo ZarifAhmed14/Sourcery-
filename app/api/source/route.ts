@@ -24,6 +24,7 @@ export async function POST(req: Request) {
       bangladeshMode: input.bangladeshMode ?? false,
       topK: input.topK ?? 10,
       category: input.category,
+      product: input.product,
       requestId,
     })
 

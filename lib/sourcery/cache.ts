@@ -18,7 +18,7 @@ export function buildCacheKey(args: {
 }): string {
   const normalized = args.query.trim().toLowerCase().replace(/\s+/g, " ")
   const raw = [
-    args.version ?? "source-v4",
+    args.version ?? "source-v5",
     normalized,
     `bd=${args.bangladeshMode ? 1 : 0}`,
     `k=${args.topK}`,

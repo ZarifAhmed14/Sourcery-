@@ -34,8 +34,8 @@ export function checkRateLimit(key: string, policy: RateLimitPolicy): { allowed:
 }
 
 export const SOURCE_RATE_LIMIT: RateLimitPolicy = {
-  capacity: 6,
-  refillTokens: 1,
+  capacity: 40,
+  refillTokens: 20,
   refillMs: 60_000,
 }
 

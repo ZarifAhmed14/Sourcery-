@@ -3,6 +3,7 @@
 // Also keeps a short "Recent searches" list for the sidebar.
 
 import type { SourcingResult } from "@/lib/sourcery/orchestrator"
+import type { SupplierCategory } from "@/lib/types"
 
 // Storage keys — namespaced under sourcery.* so they don't collide with anything else.
 const LATEST_KEY = "sourcery.latest_result.v1"
@@ -18,6 +19,9 @@ export type RecentQuery = {
   count: number
   // ISO timestamp when the run completed.
   ts: string
+  category?: SupplierCategory
+  product?: string
+  confidence?: "high" | "medium" | "low"
 }
 
 // Persist the latest sourcing result so /app/compare can pick it up without re-fetching.

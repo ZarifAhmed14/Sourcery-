@@ -1,55 +1,65 @@
-// Server actions for Sourcery — persist sourcing runs and sign the user out.
-// Server actions run only on the server, so the Supabase service role / cookies stay private.
 "use server"
 
-import { createClient, isSupabaseConfigured } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
+import { createClient, isSupabaseConfigured } from "@/lib/supabase/server"
 import type { SourcingResult } from "@/lib/sourcery/orchestrator"
+import type { SupplierCategory } from "@/lib/types"
 
-// Persist a completed sourcing run for the currently signed-in user.
-// Fire-and-forget from the client — silently no-ops if the user is not authenticated.
 export async function saveSearchAction(payload: {
   query: string
   bangladeshMode: boolean
   result: SourcingResult
+  category?: SupplierCategory
+  product?: string
 }): Promise<{ ok: boolean; reason?: string }> {
   if (!isSupabaseConfigured()) return { ok: false, reason: "supabase_not_configured" }
-  // Server-side Supabase client; reads the request cookies automatically.
+
   const supabase = await createClient()
-  // Determine whether someone is signed in. We don't error if not — we just skip.
   const {
     data: { user },
   } = await supabase.auth.getUser()
+
   if (!user) return { ok: false, reason: "not_authenticated" }
 
-  // Insert the row. RLS policy "saved_searches_insert_own" enforces user_id = auth.uid().
-  const { error } = await supabase.from("saved_searches").insert({
+  const canonical = await supabase.from("saved_searches").insert({
     user_id: user.id,
     query: payload.query,
     bangladesh_mode: payload.bangladeshMode,
-    // The full agent output (suppliers + discovery + risk + comparison + explainability) lives in jsonb.
     results: payload.result,
     metadata: {
-      // Number of suppliers returned — used by the dashboard list to show "12 suppliers".
       result_count: payload.result.suppliers.length,
-      // Aggregate confidence rollup — surfaced as a pill on dashboard rows.
       confidence: payload.result.meta.confidence,
-      // Country diversity check — useful for evals and future analytics.
       country_diversity: payload.result.meta.country_diversity,
-      // Whether this run was served from the AI cache (telemetry only).
       cached: payload.result.meta.cached,
+      category: payload.category,
+      product: payload.product,
     },
   })
 
-  if (error) {
-    // We log but never throw — saving is best-effort and shouldn't break the UX.
-    console.log("[v0] saveSearchAction insert error:", error.message)
-    return { ok: false, reason: error.message }
+  if (!canonical.error) return { ok: true }
+
+  console.log("[sourcery] canonical saved_searches insert failed:", canonical.error.message)
+  const legacy = await supabase.from("saved_searches").insert({
+    user_id: user.id,
+    query: payload.query,
+    filters: {
+      bangladesh_mode: payload.bangladeshMode,
+      category: payload.category ?? null,
+      product: payload.product ?? null,
+    },
+    result_supplier_ids: payload.result.suppliers.map((supplier) => supplier.id),
+    results_snapshot: payload.result,
+    notes: `Saved by Sourcery compatibility path. request_id=${payload.result.meta.request_id}`,
+  })
+
+  if (legacy.error) {
+    console.log("[sourcery] legacy saved_searches insert failed:", legacy.error.message)
+    return { ok: false, reason: legacy.error.message }
   }
+
   return { ok: true }
 }
 
-// Sign the current user out and bounce them back to the landing page.
 export async function signOutAction(): Promise<void> {
   if (!isSupabaseConfigured()) redirect("/")
   const supabase = await createClient()

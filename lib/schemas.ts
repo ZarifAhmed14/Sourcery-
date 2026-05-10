@@ -49,10 +49,11 @@ export const SupplierSchema = z.object({
 })
 
 export const SourceRequestSchema = z.object({
-  query: z.string().trim().min(5).max(800),
+  query: z.string().trim().min(2).max(800),
   bangladeshMode: z.boolean().default(false),
   topK: z.number().int().min(3).max(10).default(10),
   category: SupplierCategorySchema.nullable().optional(),
+  product: z.string().trim().min(2).max(120).nullable().optional(),
 })
 
 export const SupplierListRequestSchema = z.object({

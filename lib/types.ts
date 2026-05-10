@@ -61,6 +61,6 @@ export type ApiMeta = {
   cached: boolean
   retrieval_mode: "vector" | "full_text" | "deterministic"
   llm_mode: "ai" | "deterministic_fallback"
-  ai_provider: "ai_sdk" | "pollinations" | "none"
+  ai_provider: "ai_sdk" | "gemini" | "pollinations" | "none"
   elapsed_ms: number
 }

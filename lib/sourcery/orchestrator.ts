@@ -15,9 +15,11 @@ import { generateStructuredObject, type AiGenerationProvider } from "@/lib/ai/ge
 import { ORCHESTRATOR_SYSTEM, BANGLADESH_MODE_PROMPT } from "@/lib/prompts/system"
 import { fallbackExplanation, validateExplainability } from "@/lib/guardrail"
 import { buildCacheKey, getCached, setCached } from "@/lib/sourcery/cache"
-import { retrieveCandidates, rescoreForBangladeshMode, type RetrievalMode } from "@/lib/sourcery/retrieval"
+import { detectCategory, retrieveCandidates, rescoreForBangladeshMode, type RetrievalMode } from "@/lib/sourcery/retrieval"
 import { recordSourceEvent } from "@/lib/sourcery/telemetry"
+import { isSupportedProduct, supportedProductHelpText } from "@/lib/sourcery/supported-products"
 import type { ApiMeta, Supplier, SupplierCategory } from "@/lib/types"
+import { ApiRequestError } from "@/lib/backend/http"
 
 export type SourcingResult = {
   suppliers: Supplier[]
@@ -39,6 +41,9 @@ const SingleSupplierAgentOutputSchema = z.object({
 })
 
 type SingleSupplierAgentOutput = z.infer<typeof SingleSupplierAgentOutputSchema>
+
+const UNSUPPORTED_DEMO_QUERY =
+  /\b(electronic|electronics|sensor|sensors|module|modules|pcb|bluetooth|smart device|charger|earbud|power bank|adapter)\b/i
 
 function leanSupplier(supplier: Supplier) {
   return {
@@ -407,18 +412,34 @@ export async function runSourcingOrchestrator(args: {
   bangladeshMode: boolean
   topK?: number
   category?: SupplierCategory | null
+  product?: string | null
   requestId?: string
 }): Promise<SourcingResult> {
   const startedAt = Date.now()
+  const detectedCategory = args.category ?? detectCategory(args.query)
+  if (
+    UNSUPPORTED_DEMO_QUERY.test(args.query) ||
+    !detectedCategory ||
+    !isSupportedProduct(detectedCategory, args.product)
+  ) {
+    throw new ApiRequestError(
+      "BAD_REQUEST",
+      `This demo workspace is locked to supported product paths. Please choose one category/product chip first. Supported paths: ${supportedProductHelpText()}`,
+      400,
+    )
+  }
   const requestId = args.requestId ?? randomUUID()
   const topK = args.topK ?? 10
   const configuredProvider = getAiGenerationProvider()
-  const sourceProvider = configuredProvider === "pollinations" && !isFreeSourceAiEnabled() ? "none" : configuredProvider
+  const sourceProvider =
+    (configuredProvider === "pollinations" || configuredProvider === "gemini") && !isFreeSourceAiEnabled()
+      ? "none"
+      : configuredProvider
   const cacheKey = buildCacheKey({
     query: args.query,
     bangladeshMode: args.bangladeshMode,
     topK,
-    category: args.category,
+    category: detectedCategory,
     aiProvider: sourceProvider,
   })
   const cached = await getCached<SourcingResult>(cacheKey)
@@ -434,7 +455,7 @@ export async function runSourcingOrchestrator(args: {
     }
   }
 
-  const retrieval = await retrieveCandidates(args.query, 20, args.category)
+  const retrieval = await retrieveCandidates(args.query, 20, detectedCategory)
   if (retrieval.suppliers.length === 0) {
     throw new Error("No supplier candidates are available. Seed Supabase first, then rerun the query.")
   }

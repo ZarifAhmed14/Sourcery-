@@ -107,22 +107,36 @@ alter table public.saved_searches enable row level security;
 alter table public.ai_cache enable row level security;
 alter table public.source_events enable row level security;
 
-create policy suppliers_public_read on public.suppliers for select using (true);
-create policy supplier_relationships_public_read on public.supplier_relationships for select using (true);
+revoke all on table public.suppliers from anon, authenticated;
+revoke all on table public.supplier_relationships from anon, authenticated;
+revoke all on table public.ai_cache from anon, authenticated;
+revoke all on table public.source_events from anon, authenticated;
 
 create policy saved_searches_select_own on public.saved_searches for select using (auth.uid() = user_id);
 create policy saved_searches_insert_own on public.saved_searches for insert with check (auth.uid() = user_id);
 create policy saved_searches_update_own on public.saved_searches for update using (auth.uid() = user_id);
 create policy saved_searches_delete_own on public.saved_searches for delete using (auth.uid() = user_id);
 
--- ai_cache and source_events intentionally have no anon policies.
--- Server writes use SUPABASE_SERVICE_ROLE_KEY through lib/supabase/admin.ts.
+grant usage on schema public to authenticated;
+grant usage on schema public to service_role;
+grant select, insert, update, delete on table public.saved_searches to authenticated;
+grant all on table public.suppliers to service_role;
+grant all on table public.supplier_relationships to service_role;
+grant all on table public.saved_searches to service_role;
+grant all on table public.ai_cache to service_role;
+grant all on table public.source_events to service_role;
+
+-- suppliers, supplier_relationships, ai_cache, and source_events intentionally have no anon policies.
+-- Browser access goes through Next.js API routes. Server reads/writes use SUPABASE_SERVICE_ROLE_KEY.
 
 create or replace function public.match_suppliers(
   query_embedding vector(1536),
   match_count integer default 20,
-  category_filter text default null,
-  min_similarity double precision default 0.05
+  filter_category text default null,
+  filter_country text default null,
+  filter_region text default null,
+  max_risk_score integer default null,
+  require_bgmea boolean default null
 )
 returns table (
   id uuid,
@@ -172,8 +186,14 @@ as $$
     1 - (s.embedding <=> query_embedding) as similarity
   from public.suppliers s
   where s.embedding is not null
-    and (category_filter is null or s.category = category_filter)
-    and 1 - (s.embedding <=> query_embedding) >= min_similarity
+    and (filter_category is null or s.category = filter_category)
+    and (filter_country is null or s.country = filter_country)
+    and (filter_region is null or s.region = filter_region)
+    and (max_risk_score is null or s.risk_score <= max_risk_score)
+    and (require_bgmea is null or s.bgmea_certified = require_bgmea)
   order by s.embedding <=> query_embedding
-  limit match_count;
+  limit least(greatest(match_count, 1), 50);
 $$;
+
+revoke all on function public.match_suppliers(vector, integer, text, text, text, integer, boolean) from anon, authenticated;
+grant execute on function public.match_suppliers(vector, integer, text, text, text, integer, boolean) to service_role;

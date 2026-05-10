@@ -79,13 +79,24 @@ export function hasPaidAiGenerationEnv(): boolean {
   )
 }
 
-export function getFreeAiProvider(): "pollinations" | "none" {
+export function hasGeminiEnv(): boolean {
+  return Boolean(readAnyEnv("GEMINI_API_KEY", "GOOGLE_GENERATIVE_AI_API_KEY"))
+}
+
+export function getGeminiApiKey(): string {
+  const value = readAnyEnv("GEMINI_API_KEY", "GOOGLE_GENERATIVE_AI_API_KEY")
+  if (!value) throw new Error("Missing required environment variable: GEMINI_API_KEY or GOOGLE_GENERATIVE_AI_API_KEY")
+  return value
+}
+
+export function getFreeAiProvider(): "gemini" | "pollinations" | "none" {
   const provider = readEnv("AI_FREE_PROVIDER")
   if (provider === "none" || readEnv("AI_DISABLE_FREE_PROVIDER") === "1") return "none"
+  if (provider === "gemini" && hasGeminiEnv()) return "gemini"
   return "pollinations"
 }
 
-export function getAiGenerationProvider(): "ai_sdk" | "pollinations" | "none" {
+export function getAiGenerationProvider(): "ai_sdk" | "gemini" | "pollinations" | "none" {
   if (isAiDisabled()) return "none"
   if (hasPaidAiGenerationEnv()) return "ai_sdk"
   return getFreeAiProvider()
@@ -119,6 +130,10 @@ export function getPollinationsBaseUrl(): string {
   return readEnv("POLLINATIONS_BASE_URL") ?? "https://text.pollinations.ai"
 }
 
+export function getGeminiModel(): string {
+  return readEnv("GEMINI_MODEL") ?? "gemini-2.5-flash"
+}
+
 export function publicRuntimeStatus() {
   const generationProvider = getAiGenerationProvider()
   return {
@@ -132,5 +147,6 @@ export function publicRuntimeStatus() {
     embeddingModel: getEmbeddingModel(),
     freeProvider: getFreeAiProvider(),
     pollinationsModel: generationProvider === "pollinations" ? getPollinationsModel() : null,
+    geminiModel: generationProvider === "gemini" ? getGeminiModel() : null,
   }
 }

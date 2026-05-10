@@ -185,6 +185,22 @@ async function checkSourceEventsTable() {
   if (error) throw error
 }
 
+async function checkSavedSearchesCanonicalColumns() {
+  const { error } = await admin
+    .from("saved_searches")
+    .select("id,user_id,query,bangladesh_mode,results,metadata,created_at", { count: "exact", head: true })
+
+  if (error) throw error
+}
+
+async function checkAiCacheTable() {
+  const { error } = await admin
+    .from("ai_cache")
+    .select("cache_key,response,created_at,expires_at", { count: "exact", head: true })
+
+  if (error) throw error
+}
+
 let failed = false
 
 try {
@@ -244,6 +260,22 @@ try {
 } catch (error) {
   failed = true
   statusLine(false, "source_events telemetry table exists", error.message)
+}
+
+try {
+  await checkAiCacheTable()
+  statusLine(true, "ai_cache table exists", "cache_key, response, expires_at")
+} catch (error) {
+  failed = true
+  statusLine(false, "ai_cache table exists", error.message)
+}
+
+try {
+  await checkSavedSearchesCanonicalColumns()
+  statusLine(true, "saved_searches canonical columns exist", "bangladesh_mode, results, metadata")
+} catch (error) {
+  failed = true
+  statusLine(false, "saved_searches canonical columns exist", error.message || "missing canonical columns")
 }
 
 process.exit(failed ? 1 : 0)

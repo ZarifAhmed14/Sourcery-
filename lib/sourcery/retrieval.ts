@@ -21,9 +21,9 @@ const CATEGORY_KEYWORDS: Record<SupplierCategory, RegExp> = {
   apparel: /\b(shirt|tee|t-shirt|hoodie|sweat|jeans|denim|jacket|knit|woven|fabric|garment|apparel|legging|activewear|silk|cashmere|cotton|textile)\b/,
   beauty: /\b(skincare|skin care|serum|cosmetic|lipstick|beauty|haircare|shampoo|cream|lotion|argan|cleanser|fragrance|perfume|soap)\b/,
   home: /\b(bedding|towel|sheet|rug|carpet|kitchen|ceramic|porcelain|home|decor|cookware|pillow|linen|bath|furniture)\b/,
-  food: /\b(food|spice|coffee|tea|olive oil|pantry|snack|chocolate|wine|sauce|honey|nut|grain|beverage)\b/,
+  food: /\b(food|spice|coffee|tea|rice|grain|grains|olive oil|pantry|snack|chocolate|wine|sauce|honey|nut|beverage)\b/,
   packaging: /\b(packaging|package|carton|box|label|paper bag|bottle|tube|jar|container)\b/,
-  electronics: /\b(electronic|electronics|sensor|module|pcb|bluetooth|smart device|component|charger|earbud|power bank|adapter)\b/,
+  electronics: /\b(__disabled_electronics_category__)\b/,
   accessories: /\b(bag|bags|tote|totes|backpack|wallet|leather|jewel|watch|eyewear|case|accessory)\b/,
   textiles: /\b(textile|fabric|woven|linen|cotton|twill|mill|yarn)\b/,
   footwear: /\b(footwear|shoe|sneaker|canvas|outsole|leather shoe)\b/,
@@ -60,6 +60,12 @@ function filterByCategoryWithFallback(suppliers: Supplier[], category: SupplierC
   return filtered.length > 0 ? filtered : suppliers
 }
 
+function hasDirectQueryMatch(supplier: Supplier, query: string, category: SupplierCategory | null): boolean {
+  const tokens = tokenize(query)
+  const haystack = supplierSearchHaystack(supplier)
+  return (category !== null && supplier.category === category) || tokens.some((token) => haystack.includes(token))
+}
+
 function relevanceScore(supplier: Supplier, query: string, category: SupplierCategory | null): number {
   const tokens = tokenize(query)
   const haystack = supplierSearchHaystack(supplier)
@@ -80,7 +86,11 @@ function relevanceScore(supplier: Supplier, query: string, category: SupplierCat
 }
 
 function rankSuppliersForQuery(suppliers: Supplier[], query: string, category: SupplierCategory | null, topK: number): Supplier[] {
-  return filterByCategoryWithFallback(uniqueSuppliers(suppliers), category)
+  const unique = uniqueSuppliers(suppliers)
+  const directlyMatched = unique.filter((supplier) => hasDirectQueryMatch(supplier, query, category))
+  const pool = directlyMatched.length > 0 ? directlyMatched : filterByCategoryWithFallback(unique, category)
+
+  return pool
     .map((supplier) => ({ supplier, score: relevanceScore(supplier, query, category) }))
     .sort((a, b) => b.score - a.score || b.supplier.quality_rating - a.supplier.quality_rating)
     .slice(0, topK)
@@ -121,16 +131,14 @@ async function retrieveByFullText(query: string, topK: number, category: Supplie
 
   const tokens = tokenize(query)
   const suppliers = ((data ?? []) as SupplierRow[]).map(normalizeSupplier)
-  const filtered = tokens.length
-    ? suppliers
-        .map((supplier) => ({
-          supplier,
-          score: tokens.filter((token) => supplierSearchHaystack(supplier).includes(token)).length,
-        }))
-        .filter(({ score }) => score > 0)
-        .sort((a, b) => b.score - a.score || b.supplier.quality_rating - a.supplier.quality_rating)
-        .map(({ supplier, score }) => ({ ...supplier, retrieval_score: score / Math.max(tokens.length, 1) }))
-    : suppliers
+  const filtered = suppliers
+    .map((supplier) => ({
+      supplier,
+      score: tokens.filter((token) => supplierSearchHaystack(supplier).includes(token)).length,
+    }))
+    .filter(({ supplier, score }) => score > 0 || (category !== null && supplier.category === category))
+    .sort((a, b) => b.score - a.score || b.supplier.quality_rating - a.supplier.quality_rating)
+    .map(({ supplier, score }) => ({ ...supplier, retrieval_score: score / Math.max(tokens.length, 1) }))
 
   return filterByCategoryWithFallback(filtered.length ? filtered : suppliers, category).slice(0, Math.max(topK * 4, 40))
 }
