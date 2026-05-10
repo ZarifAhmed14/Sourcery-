@@ -323,7 +323,7 @@ export function SourcingChat() {
           <div className="mt-6 space-y-4">
             <div>
               <p className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-[#6d7a75]">Choose a category we can answer</p>
-              <div className="grid grid-cols-1 gap-2 min-[430px]:grid-cols-2">
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 {GUIDED_CATEGORIES.map((item) => (
                   <button
                     key={item.category}
@@ -334,7 +334,7 @@ export function SourcingChat() {
                       setQuery(`${item.products[0]} suppliers, low MOQ, export-ready, certification preferred`)
                     }}
                     className={cn(
-                      "rounded-md border px-3 py-2 text-left text-sm transition",
+                      "min-w-0 rounded-md border px-3 py-2 text-left text-sm transition",
                       selectedCategory === item.category
                         ? "border-[#2e7d65] bg-[#edf6f1] font-semibold text-[#165c49]"
                         : "border-black/10 bg-[#f7f4ec] text-[#53605c] hover:text-[#16201d]",
@@ -358,7 +358,7 @@ export function SourcingChat() {
                       setQuery(`${product} suppliers, low MOQ, export-ready, certification preferred`)
                     }}
                     className={cn(
-                      "rounded-md border px-3 py-1.5 text-sm transition",
+                      "max-w-full rounded-md border px-3 py-1.5 text-left text-sm transition",
                       selectedProduct === product
                         ? "border-[#d9b44a] bg-[#fff8df] font-semibold text-[#7a5b0f]"
                         : "border-black/10 bg-white text-[#53605c] hover:text-[#16201d]",
@@ -377,7 +377,7 @@ export function SourcingChat() {
               onChange={(event) => setQuery(event.target.value)}
               rows={7}
               disabled={status === "loading"}
-              className="resize-none rounded-md border-[#d9ded8] bg-[#fbfaf6] text-base leading-7 shadow-none focus-visible:ring-[#2e7d65]"
+              className="max-w-full resize-none rounded-md border-[#d9ded8] bg-[#fbfaf6] text-base leading-7 shadow-none focus-visible:ring-[#2e7d65]"
               placeholder="Use the category/product buttons above, then fine-tune MOQ, target price, lead time, and certifications..."
             />
             <Button disabled={status === "loading" || query.trim().length < 2} className="h-12 w-full rounded-md bg-[#16201d] text-[#f7f4ec] hover:bg-[#24332f]">
