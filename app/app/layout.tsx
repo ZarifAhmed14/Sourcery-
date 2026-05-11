@@ -14,7 +14,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
       <PreferencesProvider>
         <div className="min-h-screen overflow-x-hidden bg-[#f7f4ec] text-[#16201d]">
           <AppNav user={null} />
-          <main className="mx-auto w-full max-w-7xl px-5 pb-24 pt-6 md:px-8">{children}</main>
+          <main className="mx-auto w-full max-w-[1680px] px-8 pb-24 pt-8 md:px-10 xl:px-14">{children}</main>
         </div>
       </PreferencesProvider>
     )
@@ -33,12 +33,9 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
 
   return (
     <PreferencesProvider>
-      {/* Full-bleed cream background to match the editorial brand. */}
       <div className="min-h-screen overflow-x-hidden bg-[#f7f4ec] text-[#16201d]">
-        {/* Top nav — knows whether the user is signed in to render the right action. */}
         <AppNav user={userInfo} />
-        {/* Main content area sized to the standard editorial container. */}
-        <main className="mx-auto w-full max-w-7xl px-5 pb-24 pt-6 md:px-8">{children}</main>
+        <main className="mx-auto w-full max-w-[1680px] px-8 pb-24 pt-8 md:px-10 xl:px-14">{children}</main>
       </div>
     </PreferencesProvider>
   )

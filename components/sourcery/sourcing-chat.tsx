@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState, type FormEvent } from "react"
+import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 import {
@@ -8,22 +8,16 @@ import {
   ArrowRight,
   BadgeCheck,
   BarChart3,
-  Check,
   ChevronRight,
-  Clock,
   Copy,
-  Database,
   Loader2,
   MapPin,
   MessageSquareText,
   Search,
-  ShieldAlert,
-  Sparkles,
-  Star,
-  Target,
-  TrendingUp,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
 import { usePreferences } from "@/lib/preferences-context"
@@ -63,28 +57,30 @@ const STARTERS = [
   "Private label face serum manufacturer, MOQ under 1000, ISO 22716 preferred",
 ]
 
-const LOADING_STEPS = [
-  "Retrieval engine is matching supported products",
-  "Discovery Agent is ranking supplier candidates",
-  "Risk Agent is checking lead time, MOQ, and certifications",
-  "Comparison layer is preparing shortlist evidence",
+const DEFAULT_COUNTRIES = ["Any country", "Bangladesh", "India", "Pakistan", "Vietnam", "China", "Turkey", "Morocco"]
+const REGION_OPTIONS: Array<"Any region" | SupplierRegion> = [
+  "Any region",
+  "South Asia",
+  "Southeast Asia",
+  "East Asia",
+  "Europe",
+  "MENA",
+  "Africa",
+  "North America",
+  "South America",
 ]
-
-const REGION_OPTIONS: Array<{ value: SupplierRegion | "any"; label: string }> = [
-  { value: "any", label: "All regions" },
-  { value: "South Asia", label: "South Asia" },
-  { value: "Southeast Asia", label: "Southeast Asia" },
-  { value: "East Asia", label: "East Asia" },
-  { value: "Europe", label: "Europe" },
-  { value: "MENA", label: "MENA" },
-]
-
-const COUNTRY_OPTIONS = ["All countries", "Bangladesh", "India", "China", "Vietnam", "Turkey"]
 
 const formatUSD = (value?: number | null) =>
   typeof value === "number"
     ? new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(value)
     : "TBD"
+
+const parseOptionalNumber = (value: string) => {
+  const trimmed = value.trim()
+  if (!trimmed) return undefined
+  const parsed = Number(trimmed)
+  return Number.isFinite(parsed) ? parsed : undefined
+}
 
 export function SourcingChat() {
   const searchParams = useSearchParams()
@@ -92,11 +88,8 @@ export function SourcingChat() {
 
   const [query, setQuery] = useState(STARTERS[0])
   const [status, setStatus] = useState<"idle" | "loading" | "done" | "error">("idle")
-  const [loadingStep, setLoadingStep] = useState(0)
   const [result, setResult] = useState<SourcingResult | null>(null)
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
-  const [directorySource, setDirectorySource] = useState<"demo" | "supabase">("demo")
-  const [health, setHealth] = useState<HealthResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [shortlist, setShortlist] = useState<string[]>([])
@@ -104,11 +97,11 @@ export function SourcingChat() {
   const [bargainLoading, setBargainLoading] = useState(false)
   const [selectedCategory, setSelectedCategory] = useState<SupplierCategory>("accessories")
   const [selectedProduct, setSelectedProduct] = useState("jute tote bags")
-  const [selectedCountry, setSelectedCountry] = useState("All countries")
-  const [selectedRegion, setSelectedRegion] = useState<SupplierRegion | "any">(bangladeshMode ? "South Asia" : "any")
-  const [maxPrice, setMaxPrice] = useState(5)
-  const [maxLeadTime, setMaxLeadTime] = useState(45)
-  const [topK, setTopK] = useState(4)
+  const [selectedCountry, setSelectedCountry] = useState("Any country")
+  const [selectedRegion, setSelectedRegion] = useState<"Any region" | SupplierRegion>("Any region")
+  const [targetPriceMin, setTargetPriceMin] = useState("")
+  const [targetPriceMax, setTargetPriceMax] = useState("")
+  const [orderQuantity, setOrderQuantity] = useState("")
 
   useEffect(() => {
     const prefill = searchParams?.get("prefill")
@@ -120,27 +113,12 @@ export function SourcingChat() {
   }, [])
 
   useEffect(() => {
-    setSelectedRegion(bangladeshMode ? "South Asia" : "any")
-    setSelectedCountry(bangladeshMode ? "Bangladesh" : "All countries")
-  }, [bangladeshMode])
-
-  useEffect(() => {
     let active = true
-    void fetch("/api/health")
-      .then((res) => res.json())
-      .then((data: HealthResponse) => {
-        if (active) setHealth(data)
-      })
-      .catch(() => {
-        if (active) setHealth(null)
-      })
-
     void fetch("/api/suppliers?limit=12")
       .then((res) => res.json())
       .then((data: SupplierListResponse) => {
         if (!active) return
         setSuppliers(data.suppliers ?? [])
-        setDirectorySource(data.source ?? "demo")
         setSelectedId((current) => current ?? data.suppliers?.[0]?.id ?? null)
       })
       .catch(() => {
@@ -173,22 +151,46 @@ export function SourcingChat() {
 
   const directoryPool = ranked.length > 0 ? ranked.map((item) => item.supplier) : suppliers
 
+  const availableProducts = useMemo(
+    () => SUPPORTED_PRODUCT_CATALOG.find((item) => item.category === selectedCategory)?.products ?? [],
+    [selectedCategory],
+  )
+
+  const countryOptions = useMemo(() => {
+    const dynamic = Array.from(new Set(suppliers.map((supplier) => supplier.country).filter(Boolean))).sort((a, b) =>
+      a.localeCompare(b),
+    )
+    return Array.from(new Set([...DEFAULT_COUNTRIES, ...dynamic]))
+  }, [suppliers])
+
   const filteredPool = useMemo(() => {
+    const minPrice = parseOptionalNumber(targetPriceMin)
+    const maxPrice = parseOptionalNumber(targetPriceMax)
+    const desiredQty = parseOptionalNumber(orderQuantity)
+
     return directoryPool.filter((supplier) => {
       if (selectedCategory && supplier.category !== selectedCategory) return false
-      if (selectedCountry !== "All countries" && supplier.country !== selectedCountry) return false
-      if (selectedRegion !== "any" && supplier.region !== selectedRegion) return false
-      if (supplier.unit_price_usd > maxPrice) return false
-      if (supplier.lead_time_days > maxLeadTime) return false
+      if (selectedProduct) {
+        const productNeedle = selectedProduct.toLowerCase()
+        const productMatch =
+          supplier.subcategory.toLowerCase().includes(productNeedle) ||
+          supplier.products?.some((product) => product.toLowerCase().includes(productNeedle))
+        if (!productMatch) return false
+      }
+      if (selectedCountry !== "Any country" && supplier.country !== selectedCountry) return false
+      if (selectedRegion !== "Any region" && supplier.region !== selectedRegion) return false
+      if (typeof minPrice === "number" && supplier.unit_price_usd < minPrice) return false
+      if (typeof maxPrice === "number" && supplier.unit_price_usd > maxPrice) return false
+      if (typeof desiredQty === "number" && supplier.moq > desiredQty) return false
       return true
     })
-  }, [directoryPool, selectedCategory, selectedCountry, selectedRegion, maxPrice, maxLeadTime])
+  }, [directoryPool, orderQuantity, selectedCategory, selectedCountry, selectedProduct, selectedRegion, targetPriceMax, targetPriceMin])
 
   const visibleRanked = useMemo(() => {
     if (ranked.length === 0) return []
     const visibleIds = new Set(filteredPool.map((supplier) => supplier.id))
-    return ranked.filter((item) => visibleIds.has(item.supplier.id)).slice(0, topK)
-  }, [filteredPool, ranked, topK])
+    return ranked.filter((item) => visibleIds.has(item.supplier.id)).slice(0, 4)
+  }, [filteredPool, ranked])
 
   const selectedSupplier =
     (visibleRanked.find((item) => item.supplier.id === selectedId)?.supplier ??
@@ -198,28 +200,6 @@ export function SourcingChat() {
       null)
 
   const selectedBundle = visibleRanked.find((item) => item.supplier.id === selectedSupplier?.id) ?? null
-
-  const shortlistSuppliers = useMemo(
-    () => directoryPool.filter((supplier) => shortlist.includes(supplier.id)).slice(0, 4),
-    [directoryPool, shortlist],
-  )
-
-  const shortlistSummary = useMemo(() => {
-    if (shortlistSuppliers.length === 0) return "Shortlist up to four suppliers to unlock compare, bargain, and simulation."
-    const lowestRisk = shortlistSuppliers.reduce((best, current) =>
-      current.risk_score < best.risk_score ? current : best,
-    )
-    const cheapest = shortlistSuppliers.reduce((best, current) =>
-      current.unit_price_usd < best.unit_price_usd ? current : best,
-    )
-    return `${lowestRisk.name} is the safest current pick, while ${cheapest.name} is the cheapest supplier in the shortlist.`
-  }, [shortlistSuppliers])
-
-  const averageFitScore = useMemo(() => {
-    if (!result || result.discovery.length === 0) return null
-    const total = result.discovery.reduce((sum, item) => sum + item.fit_score, 0)
-    return Math.round(total / result.discovery.length)
-  }, [result])
 
   const mismatchWarning = useMemo(() => {
     const lowered = query.toLowerCase()
@@ -236,18 +216,12 @@ export function SourcingChat() {
     return `Your brief sounds closer to ${foreign.label}, but the selected category is ${selectedGroup.label}. Adjust filters or continue anyway.`
   }, [query, selectedCategory])
 
-  const onSubmit = async (event: FormEvent) => {
-    event.preventDefault()
+  const executeSourcing = async () => {
     const trimmed = query.trim()
     if (trimmed.length < 2) return
 
     setError(null)
     setStatus("loading")
-    setLoadingStep(0)
-
-    const progress = window.setInterval(() => {
-      setLoadingStep((step) => Math.min(step + 1, LOADING_STEPS.length - 1))
-    }, 700)
 
     try {
       const res = await fetch("/api/source", {
@@ -256,9 +230,14 @@ export function SourcingChat() {
         body: JSON.stringify({
           query: trimmed,
           bangladeshMode,
-          topK: Math.max(topK, 4),
+          topK: 4,
           category: selectedCategory,
           product: selectedProduct,
+          country: selectedCountry === "Any country" ? null : selectedCountry,
+          region: selectedRegion === "Any region" ? null : selectedRegion,
+          targetUnitPriceMin: parseOptionalNumber(targetPriceMin) ?? null,
+          targetUnitPriceMax: parseOptionalNumber(targetPriceMax) ?? null,
+          orderQuantity: parseOptionalNumber(orderQuantity) ?? null,
         }),
       })
       if (!res.ok) {
@@ -290,21 +269,12 @@ export function SourcingChat() {
     } catch (err) {
       setStatus("error")
       setError((err as Error).message)
-    } finally {
-      window.clearInterval(progress)
     }
   }
 
-  const runJudgeDemo = () => {
-    setSelectedCategory("accessories")
-    setSelectedProduct("jute tote bags")
-    setSelectedCountry("Bangladesh")
-    setSelectedRegion("South Asia")
-    setMaxPrice(3)
-    setMaxLeadTime(35)
-    setTopK(4)
-    setQuery("Eco-friendly jute tote bags under $3, low MOQ, export-ready, BGMEA or ISO preferred")
-    setError(null)
+  const onSubmit = async (event: FormEvent) => {
+    event.preventDefault()
+    await executeSourcing()
   }
 
   const toggleShortlist = (supplierId: string) => {
@@ -359,137 +329,135 @@ export function SourcingChat() {
   }
 
   return (
-    <div className="space-y-6">
-      <section className="grid gap-5 xl:grid-cols-[260px_minmax(0,1fr)_320px]">
-        <aside className="space-y-5 rounded-xl border border-black/10 bg-white/80 p-4 shadow-sm">
-          <div className="flex items-start justify-between gap-3 border-b border-black/10 pb-4">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#6d7a75]">Filters</p>
-              <h1 className="mt-1 text-xl font-semibold text-[#16201d]">Buyer controls</h1>
-            </div>
+    <div className="space-y-8">
+      <section className="grid gap-6 xl:grid-cols-[320px_minmax(0,1fr)_360px]">
+        <aside className="space-y-5 rounded-2xl border border-black/10 bg-white/72 p-5 shadow-sm backdrop-blur-sm">
+          <div className="grid gap-4">
+            <FilterBlock label="Category">
+              <Select
+                value={selectedCategory}
+                onValueChange={(value) => {
+                  const category = value as SupplierCategory
+                  setSelectedCategory(category)
+                  const nextProduct = SUPPORTED_PRODUCT_CATALOG.find((item) => item.category === category)?.products[0] ?? ""
+                  setSelectedProduct(nextProduct)
+                  if (nextProduct) {
+                    setQuery(`${nextProduct} suppliers, low MOQ, export-ready, certification preferred`)
+                  }
+                }}
+              >
+                <SelectTrigger className="w-full border-black/10 bg-[#f7f4ec] text-[#16201d]">
+                  <SelectValue placeholder="Select category" />
+                </SelectTrigger>
+                <SelectContent className="border-black/10 bg-[#fffdf7] text-[#16201d]">
+                  {SUPPORTED_PRODUCT_CATALOG.map((item) => (
+                    <SelectItem key={item.category} value={item.category}>
+                      {item.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </FilterBlock>
+
+            <FilterBlock label="Product">
+              <Select value={selectedProduct} onValueChange={setSelectedProduct}>
+                <SelectTrigger className="w-full border-black/10 bg-[#f7f4ec] text-[#16201d]">
+                  <SelectValue placeholder="Select product" />
+                </SelectTrigger>
+                <SelectContent className="border-black/10 bg-[#fffdf7] text-[#16201d]">
+                  {availableProducts.map((product) => (
+                    <SelectItem key={product} value={product} className="capitalize">
+                      {product}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </FilterBlock>
+
+            <FilterBlock label="Country">
+              <Select value={selectedCountry} onValueChange={setSelectedCountry}>
+                <SelectTrigger className="w-full border-black/10 bg-[#f7f4ec] text-[#16201d]">
+                  <SelectValue placeholder="Select country" />
+                </SelectTrigger>
+                <SelectContent className="border-black/10 bg-[#fffdf7] text-[#16201d]">
+                  {countryOptions.map((country) => (
+                    <SelectItem key={country} value={country}>
+                      {country}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </FilterBlock>
+
+            <FilterBlock label="Region">
+              <Select value={selectedRegion} onValueChange={(value) => setSelectedRegion(value as "Any region" | SupplierRegion)}>
+                <SelectTrigger className="w-full border-black/10 bg-[#f7f4ec] text-[#16201d]">
+                  <SelectValue placeholder="Select region" />
+                </SelectTrigger>
+                <SelectContent className="border-black/10 bg-[#fffdf7] text-[#16201d]">
+                  {REGION_OPTIONS.map((region) => (
+                    <SelectItem key={region} value={region}>
+                      {region}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </FilterBlock>
+
+            <FilterBlock label="Target unit price">
+              <div className="grid grid-cols-2 gap-3">
+                <Input
+                  inputMode="decimal"
+                  value={targetPriceMin}
+                  onChange={(event) => setTargetPriceMin(event.target.value)}
+                  placeholder="Min $"
+                  className="border-black/10 bg-[#f7f4ec] text-[#16201d] placeholder:text-[#85918c]"
+                />
+                <Input
+                  inputMode="decimal"
+                  value={targetPriceMax}
+                  onChange={(event) => setTargetPriceMax(event.target.value)}
+                  placeholder="Max $"
+                  className="border-black/10 bg-[#f7f4ec] text-[#16201d] placeholder:text-[#85918c]"
+                />
+              </div>
+            </FilterBlock>
+
+            <FilterBlock label="Order qty (units)">
+              <Input
+                inputMode="numeric"
+                value={orderQuantity}
+                onChange={(event) => setOrderQuantity(event.target.value)}
+                placeholder="e.g. 1000"
+                className="border-black/10 bg-[#f7f4ec] text-[#16201d] placeholder:text-[#85918c]"
+              />
+            </FilterBlock>
+
             <Button
               type="button"
-              onClick={runJudgeDemo}
-              variant="outline"
-              className="h-9 rounded-full border-[#d9b44a]/40 bg-[#fff8df] px-3 text-xs text-[#7a5b0f] hover:bg-[#fff3bf]"
+              onClick={() => void executeSourcing()}
+              disabled={status === "loading" || query.trim().length < 2}
+              className="h-11 rounded-xl bg-[#16201d] text-[#f7f4ec] hover:bg-[#24332f]"
             >
-              <Sparkles className="mr-1.5 h-4 w-4" />
-              Demo
+              {status === "loading" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Search className="mr-2 h-4 w-4" />}
+              Run sourcing
             </Button>
           </div>
-
-          <div>
-            <div className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-[#6d7a75]">Category</div>
-            <div className="grid gap-1.5">
-              {SUPPORTED_PRODUCT_CATALOG.map((item) => (
-                <button
-                  key={item.category}
-                  type="button"
-                  onClick={() => {
-                    setSelectedCategory(item.category)
-                    setSelectedProduct(item.products[0])
-                    setQuery(`${item.products[0]} suppliers, low MOQ, export-ready, certification preferred`)
-                  }}
-                  className={cn(
-                    "rounded-lg border px-3 py-2.5 text-left text-sm transition",
-                    selectedCategory === item.category
-                      ? "border-[#2e7d65] bg-[#edf6f1] text-[#165c49] shadow-sm"
-                      : "border-transparent bg-transparent text-[#53605c] hover:bg-[#f7f4ec] hover:text-[#16201d]",
-                  )}
-                >
-                  <div className="font-medium">{item.label}</div>
-                  <div className="mt-1 text-xs text-[#6d7a75]">{item.products.slice(0, 2).join(" / ")}</div>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <FilterGroup label="Product">
-            <select
-              value={selectedProduct}
-              onChange={(event) => setSelectedProduct(event.target.value)}
-              className="h-11 w-full rounded-lg border border-black/10 bg-white px-3 text-sm outline-none"
-            >
-              {SUPPORTED_PRODUCT_CATALOG.find((item) => item.category === selectedCategory)?.products.map((product) => (
-                <option key={product} value={product}>
-                  {product}
-                </option>
-              ))}
-            </select>
-          </FilterGroup>
-
-          <FilterGroup label="Country">
-            <select
-              value={selectedCountry}
-              onChange={(event) => setSelectedCountry(event.target.value)}
-              className="h-11 w-full rounded-lg border border-black/10 bg-white px-3 text-sm outline-none"
-            >
-              {COUNTRY_OPTIONS.map((country) => (
-                <option key={country} value={country}>
-                  {country}
-                </option>
-              ))}
-            </select>
-          </FilterGroup>
-
-          <FilterGroup label="Region">
-            <select
-              value={selectedRegion}
-              onChange={(event) => setSelectedRegion(event.target.value as SupplierRegion | "any")}
-              className="h-11 w-full rounded-lg border border-black/10 bg-white px-3 text-sm outline-none"
-            >
-              {REGION_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </FilterGroup>
-
-          <RangeField label="Max unit price" value={maxPrice} min={1} max={30} suffix="$" onChange={setMaxPrice} />
-          <RangeField label="Max lead time" value={maxLeadTime} min={10} max={90} suffix="d" onChange={setMaxLeadTime} />
-          <RangeField label="Top K results" value={topK} min={3} max={6} suffix="" onChange={setTopK} />
-
-          {bangladeshMode && (
-            <div className="rounded-xl border border-[#2e7d65]/15 bg-[#edf6f1] p-4 text-sm text-[#165c49]">
-              <div className="font-semibold">Bangladesh Mode active</div>
-              <p className="mt-1 leading-6">
-                Bangladesh Mode softly prioritizes South Asian sourcing context and highlights Bangla negotiation support.
-              </p>
-            </div>
-          )}
         </aside>
 
-        <section className="space-y-5 rounded-xl border border-black/10 bg-white p-5 shadow-sm md:p-6">
-          <WorkflowStrip />
-
-          <div className="flex flex-wrap items-start justify-between gap-4 border-b border-black/10 pb-5">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#6d7a75]">Sourcing brief</p>
-              <h2 className="mt-2 text-4xl font-semibold tracking-tight text-[#16201d]">Find the best supplier path.</h2>
-              <p className="mt-2 max-w-2xl text-sm leading-6 text-[#5d6965]">
-                Start with a supported category, sharpen your product brief, and let Sourcery rank suppliers by fit, cost,
-                lead time, and sourcing risk.
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-2 text-xs">
-              <MetaPill icon={Database} label={health?.runtime?.supabase ? "Retrieval ready" : directorySource} />
-              <MetaPill icon={Sparkles} label={health?.runtime?.aiGenerationProvider ?? "generation ready"} />
-            </div>
-          </div>
-
+        <section className="space-y-6 rounded-2xl border border-black/10 bg-white/78 p-6 shadow-sm backdrop-blur-sm md:p-7">
           <form onSubmit={onSubmit} className="space-y-4">
             <Textarea
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              rows={5}
+              rows={4}
               disabled={status === "loading"}
-              className="resize-none rounded-xl border-[#d9ded8] bg-[#fbfaf6] text-base leading-7 shadow-none focus-visible:ring-[#2e7d65]"
-              placeholder="Describe the supplier you need: product, MOQ, price target, lead time, and preferred certifications."
+              className="resize-none rounded-xl border-black/10 bg-[#fbf8f1] text-base leading-7 text-[#16201d] shadow-none placeholder:text-[#7f8a85] focus-visible:ring-[#d9b44a]"
+              placeholder="Describe the supplier you need."
             />
 
             {mismatchWarning && (
-              <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+              <div className="flex items-start gap-3 rounded-xl border border-amber-400/30 bg-[#fff4d8] px-4 py-3 text-sm text-[#7a5b0f]">
                 <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
                 <p>{mismatchWarning}</p>
               </div>
@@ -501,54 +469,23 @@ export function SourcingChat() {
                 className="h-12 rounded-lg bg-[#16201d] px-5 text-[#f7f4ec] hover:bg-[#24332f]"
               >
                 {status === "loading" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Search className="mr-2 h-4 w-4" />}
-                Run supplier intelligence
-              </Button>
-              <Button asChild variant="outline" className="h-12 rounded-lg bg-transparent">
-                <Link href="/app/workflow">
-                  Workspace map
-                  <ArrowRight className="ml-2 h-4 w-4" />
-                </Link>
+                Run sourcing
               </Button>
             </div>
           </form>
 
-          {status === "loading" && (
-            <div className="rounded-xl border border-[#2e7d65]/15 bg-[#edf6f1] p-4 text-sm text-[#165c49]">
-              <div className="flex items-center gap-2 font-semibold">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                {LOADING_STEPS[loadingStep]}
-              </div>
-              <div className="mt-3 h-2 overflow-hidden rounded-full bg-white">
-                <div
-                  className="h-full rounded-full bg-[#2e7d65] transition-all"
-                  style={{ width: `${((loadingStep + 1) / LOADING_STEPS.length) * 100}%` }}
-                />
-              </div>
-            </div>
-          )}
-
           {status === "error" && error && (
-            <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
-          )}
-
-          {result && (
-            <div className="flex flex-wrap gap-2 text-xs">
-              <MetaPill icon={Database} label={result.meta.retrieval_mode} />
-              <MetaPill icon={Sparkles} label={result.meta.llm_mode} />
-              <MetaPill icon={Clock} label={`${result.meta.elapsed_ms} ms`} />
-              <MetaPill icon={Check} label={result.meta.cached ? "cached" : "fresh"} />
-              <MetaPill icon={Target} label={`${averageFitScore ?? 0}% confidence`} />
-            </div>
+            <div className="rounded-xl border border-red-400/30 bg-[#fff0ef] px-4 py-3 text-sm text-[#8a2e2b]">{error}</div>
           )}
 
           <div className="grid gap-4">
-            {(visibleRanked.length > 0 ? visibleRanked : filteredPool.slice(0, topK).map((supplier, index) => ({
+            {(visibleRanked.length > 0 ? visibleRanked : filteredPool.slice(0, 4).map((supplier, index) => ({
               supplier,
               discovery: {
                 supplier_id: supplier.id,
                 rank: index + 1,
                 fit_score: Math.max(60, 93 - index * 5),
-                explanation: `${supplier.name} is present in the supplier directory and ready for a live sourcing run.`,
+                explanation: `${supplier.name} is present in the supplier base and ready for a live sourcing run.`,
                 key_factors: [`${supplier.country} supply base`, `${supplier.category} match`],
                 confidence: "medium" as const,
                 confidence_reason: "Directory view before a fresh AI-backed sourcing run.",
@@ -580,30 +517,30 @@ export function SourcingChat() {
               <article
                 key={item.supplier.id}
                 className={cn(
-                  "rounded-xl border p-5 transition",
+                  "rounded-2xl border p-6 transition",
                   selectedSupplier?.id === item.supplier.id
-                    ? "border-[#2e7d65]/40 bg-[#f7fbf9] shadow-sm"
-                    : "border-black/10 bg-white hover:border-[#2e7d65]/25 hover:shadow-sm",
+                    ? "border-[#d9b44a]/45 bg-[#fffdf7] shadow-sm"
+                    : "border-black/10 bg-white hover:border-[#d9b44a]/35 hover:shadow-sm",
                 )}
               >
                 <div className="flex flex-wrap items-start justify-between gap-4">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="rounded-md bg-[#16201d] px-2.5 py-1 text-xs font-semibold text-white">#{item.discovery.rank}</span>
+                      <span className="rounded-md bg-[#d9b44a] px-2.5 py-1 text-xs font-semibold text-[#16201d]">#{item.discovery.rank}</span>
                       <h3 className="text-xl font-semibold text-[#16201d]">{item.supplier.name}</h3>
                       {item.supplier.bgmea_certified && <BadgeTag label="BGMEA" tone="green" />}
                       {item.supplier.source_type === "public_web" && <BadgeTag label="Public profile" tone="slate" />}
                     </div>
-                    <p className="mt-2 flex flex-wrap items-center gap-2 text-sm text-[#5d6965]">
-                      <MapPin className="h-4 w-4 text-[#2e7d65]" />
+                    <p className="mt-2 flex flex-wrap items-center gap-2 text-sm text-[#66736f]">
+                      <MapPin className="h-4 w-4 text-[#d9b44a]" />
                       {item.supplier.city}, {item.supplier.country}
-                      <span className="text-[#9ba49f]">/</span>
+                      <span className="text-[#9aa59f]">/</span>
                       <span className="capitalize">{item.supplier.category}</span>
                     </p>
                   </div>
                   <div className="text-right">
                     <div className="text-3xl font-semibold text-[#16201d]">{Math.round(item.discovery.fit_score)}%</div>
-                    <div className="text-xs uppercase tracking-[0.16em] text-[#6d7a75]">fit</div>
+                    <div className="text-xs uppercase tracking-[0.16em] text-[#7d8883]">fit</div>
                   </div>
                 </div>
 
@@ -615,21 +552,21 @@ export function SourcingChat() {
                   <MetricCard label="Risk" value={riskLabel(item.supplier.risk_score)} tone={riskTone(item.supplier.risk_score)} />
                 </div>
 
-                <div className="mt-4 border-l-2 border-[#2e7d65]/40 bg-[#f7f4ec] px-4 py-3">
-                  <div className="text-xs font-semibold uppercase tracking-[0.14em] text-[#2e7d65]">Why this supplier</div>
-                  <p className="mt-1 text-sm leading-6 text-[#475450]">{item.discovery.explanation}</p>
+                <div className="mt-5 border-l-2 border-[#d9b44a]/50 bg-[#f8f2e2] px-4 py-3">
+                  <div className="text-xs font-semibold uppercase tracking-[0.14em] text-[#d9b44a]">Why this supplier</div>
+                  <p className="mt-1 text-sm leading-6 text-[#53605c]">{item.discovery.explanation}</p>
                 </div>
 
-                <div className="mt-4 flex flex-wrap gap-2">
+                <div className="mt-5 flex flex-wrap gap-2">
                   {buildKeyPills(item.supplier, item.discovery.key_factors).map((pill) => (
-                    <span key={pill} className="rounded-full bg-[#eef1ea] px-3 py-1 text-xs font-medium text-[#51605a]">
+                    <span key={pill} className="rounded-full bg-[#f1ede3] px-3 py-1 text-xs font-medium text-[#53605c]">
                       {pill}
                     </span>
                   ))}
                 </div>
 
                 <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
-                  <div className="text-sm text-[#5d6965]">
+                  <div className="text-sm text-[#6a746f]">
                     Confidence: <span className="font-medium text-[#16201d]">{item.discovery.confidence}</span>
                   </div>
                   <div className="flex flex-wrap gap-2">
@@ -637,7 +574,7 @@ export function SourcingChat() {
                       type="button"
                       variant="outline"
                       onClick={() => toggleShortlist(item.supplier.id)}
-                      className="rounded-lg bg-transparent"
+                      className="rounded-lg border-black/10 bg-transparent text-[#16201d] hover:bg-[#f1ede3] hover:text-[#16201d]"
                     >
                       {shortlist.includes(item.supplier.id) ? "Shortlisted" : "Shortlist"}
                     </Button>
@@ -645,7 +582,7 @@ export function SourcingChat() {
                       type="button"
                       variant="outline"
                       onClick={() => setSelectedId(item.supplier.id)}
-                      className="rounded-lg bg-transparent"
+                      className="rounded-lg border-black/10 bg-transparent text-[#16201d] hover:bg-[#f1ede3] hover:text-[#16201d]"
                     >
                       Open detail
                       <ChevronRight className="ml-1.5 h-4 w-4" />
@@ -657,48 +594,10 @@ export function SourcingChat() {
           </div>
         </section>
 
-        <aside className="space-y-4 rounded-xl border border-black/10 bg-[#16201d] p-5 text-white shadow-sm">
-          <div className="border-b border-white/10 pb-4">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#d9b44a]">Decision basket</p>
-            <div className="mt-2 flex items-center justify-between gap-3">
-              <h2 className="text-2xl font-semibold text-white">{shortlistSuppliers.length}/4 selected</h2>
-              <Button asChild className="rounded-lg bg-white text-[#16201d] hover:bg-[#e8eee9]">
-                <Link href="/app/compare">Compare selected</Link>
-              </Button>
-            </div>
-            <p className="mt-2 text-sm leading-6 text-[#bdc8c2]">{shortlistSummary}</p>
-          </div>
-
-          <div className="space-y-3">
-            {shortlistSuppliers.length > 0 ? (
-              shortlistSuppliers.map((supplier) => (
-                <div key={supplier.id} className="rounded-lg border border-white/10 bg-white/[0.06] p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <div className="font-medium text-white">{supplier.name}</div>
-                      <div className="mt-1 text-sm text-[#bdc8c2]">
-                        {supplier.country} / {formatUSD(supplier.unit_price_usd)}
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => toggleShortlist(supplier.id)}
-                      className="text-xs font-medium text-[#d9b44a]"
-                    >
-                      Remove
-                    </button>
-                  </div>
-                </div>
-              ))
-            ) : (
-              <div className="rounded-lg border border-dashed border-white/20 px-4 py-6 text-sm leading-6 text-[#bdc8c2]">
-                Add suppliers from the ranked board so we can compare them side by side and run profit intelligence.
-              </div>
-            )}
-          </div>
+        <aside className="space-y-5 rounded-2xl border border-black/10 bg-white/72 p-5 shadow-sm backdrop-blur-sm">
 
           {selectedSupplier ? (
-            <div className="rounded-xl border border-white/10 bg-white p-4 text-[#16201d]">
+            <div className="rounded-2xl border border-black/10 bg-[#fffdf9] p-5 text-[#16201d]">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#6d7a75]">Supplier profile</p>
@@ -717,7 +616,7 @@ export function SourcingChat() {
                 <DetailRow label="Risk explanation" value={selectedBundle?.risk.explanation ?? selectedSupplier.risk_notes ?? "Run a live sourcing query to generate a fuller explanation."} />
               </div>
 
-              <p className="mt-4 text-sm leading-6 text-[#4e5a55]">{selectedSupplier.description}</p>
+              <p className="mt-4 text-sm leading-6 text-[#53605c]">{selectedSupplier.description}</p>
 
               <div className="mt-4 flex flex-wrap gap-2">
                 <Button
@@ -729,13 +628,13 @@ export function SourcingChat() {
                   {bargainLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <MessageSquareText className="mr-2 h-4 w-4" />}
                   Bargain message
                 </Button>
-                <Button asChild variant="outline" className="rounded-lg bg-transparent">
+                <Button asChild variant="outline" className="rounded-lg border-black/10 bg-transparent text-[#16201d] hover:bg-[#f1ede3] hover:text-[#16201d]">
                   <Link href={`/app/suppliers/${selectedSupplier.id}`}>
                     Open full profile
                     <ArrowRight className="ml-2 h-4 w-4" />
                   </Link>
                 </Button>
-                <Button asChild variant="outline" className="rounded-lg bg-transparent">
+                <Button asChild variant="outline" className="rounded-lg border-black/10 bg-transparent text-[#16201d] hover:bg-[#f1ede3] hover:text-[#16201d]">
                   <Link href="/app/compare">
                     <BarChart3 className="mr-2 h-4 w-4" />
                     Profit & simulation
@@ -744,129 +643,38 @@ export function SourcingChat() {
               </div>
 
               {bargain && (
-                <div className="mt-4 rounded-lg border border-black/10 bg-[#f7f4ec] p-4">
+                <div className="mt-4 rounded-xl border border-black/10 bg-[#f7f4ec] p-4">
                   <div className="flex items-center justify-between gap-3">
                     <div>
                       <div className="text-sm font-semibold text-[#16201d]">Bangla bargain draft</div>
                       <div className="text-xs text-[#6d7a75]">{bargain.meta.llm_mode}</div>
                     </div>
-                    <Button type="button" variant="outline" onClick={copyBargain} className="rounded-lg bg-transparent">
+                    <Button type="button" variant="outline" onClick={copyBargain} className="rounded-lg border-black/10 bg-transparent text-[#16201d] hover:bg-[#f1ede3] hover:text-[#16201d]">
                       <Copy className="mr-1.5 h-4 w-4" />
                       Copy
                     </Button>
                   </div>
-                  <p className="mt-3 text-sm leading-6 text-[#4e5a55]">{bargain.message}</p>
+                  <p className="mt-3 text-sm leading-6 text-[#53605c]">{bargain.message}</p>
                 </div>
               )}
             </div>
           ) : (
-            <div className="rounded-lg border border-dashed border-white/20 px-4 py-10 text-center text-sm text-[#bdc8c2]">
+            <div className="rounded-xl border border-dashed border-black/12 bg-[#fffdf9] px-4 py-10 text-center text-sm text-[#6d7a75]">
               Pick a supplier to inspect the full profile.
             </div>
           )}
-
-          <div className="rounded-xl border border-white/10 bg-white/[0.06] p-4 text-white">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#d9b44a]">BuildFest proof</p>
-            <p className="mt-2 text-sm leading-6 text-[#bdc8c2]">
-              Workspace proof and health are still visible, but they now sit beside the product story instead of replacing it.
-            </p>
-            <div className="mt-4 flex flex-wrap gap-2">
-              <Button asChild size="sm" className="rounded-full bg-white text-[#16201d] hover:bg-[#e8eee9]">
-                <Link href="/app/workflow">Workspace map</Link>
-              </Button>
-              <Button asChild size="sm" variant="outline" className="rounded-full border-white/15 bg-transparent text-white hover:bg-white/10">
-                <Link href="/app/health">Health</Link>
-              </Button>
-            </div>
-          </div>
         </aside>
       </section>
     </div>
   )
 }
 
-function FilterGroup({ label, children }: { label: string; children: React.ReactNode }) {
+function FilterBlock({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div>
-      <div className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-[#6d7a75]">{label}</div>
+    <div className="space-y-2">
+      <div className="text-xs font-semibold uppercase tracking-[0.14em] text-[#6d7a75]">{label}</div>
       {children}
     </div>
-  )
-}
-
-function WorkflowStrip() {
-  const steps = [
-    ["Discovery", "Find matches"],
-    ["Risk", "Check tradeoffs"],
-    ["Bargain", "Draft outreach"],
-    ["Simulation", "Stress-test profit"],
-  ]
-
-  return (
-    <div className="rounded-xl border border-black/10 bg-[#16201d] p-3 text-white">
-      <div className="grid gap-2 sm:grid-cols-4">
-        {steps.map(([name, detail], index) => (
-          <Link
-            key={name}
-            href="/app/workflow"
-            className="group flex items-center gap-3 rounded-lg px-2 py-2 transition hover:bg-white/10"
-          >
-            <span className="grid h-7 w-7 shrink-0 place-items-center rounded-md bg-[#d9b44a] text-xs font-semibold text-[#16201d]">
-              {index + 1}
-            </span>
-            <span className="min-w-0">
-              <span className="block text-sm font-semibold leading-5">{name}</span>
-              <span className="block truncate text-xs text-[#bdc8c2]">{detail}</span>
-            </span>
-          </Link>
-        ))}
-      </div>
-    </div>
-  )
-}
-
-function RangeField({
-  label,
-  value,
-  min,
-  max,
-  suffix,
-  onChange,
-}: {
-  label: string
-  value: number
-  min: number
-  max: number
-  suffix: string
-  onChange: (value: number) => void
-}) {
-  return (
-    <div>
-      <div className="mb-2 flex items-center justify-between text-xs font-semibold uppercase tracking-[0.16em] text-[#6d7a75]">
-        <span>{label}</span>
-        <span className="text-[#16201d]">
-          {value}
-          {suffix}
-        </span>
-      </div>
-      <input
-        type="range"
-        min={min}
-        max={max}
-        value={value}
-        onChange={(event) => onChange(Number(event.target.value))}
-        className="w-full accent-[#2e7d65]"
-      />
-    </div>
-  )
-}
-
-function MetaPill({ icon: Icon, label }: { icon: typeof Database; label: string }) {
-  return (
-    <span className="inline-flex items-center gap-1.5 rounded-full border border-black/10 bg-[#f7f4ec] px-3 py-1.5 text-[#495751]">
-      <Icon className="h-3.5 w-3.5 text-[#2e7d65]" />
-      {label}
-    </span>
   )
 }
 
@@ -874,11 +682,11 @@ function MetricCard({ label, value, tone = "default" }: { label: string; value: 
   return (
     <div
       className={cn(
-        "rounded-lg border bg-white p-3",
-        tone === "default" && "border-black/10",
-        tone === "low" && "border-emerald-200 bg-emerald-50",
-        tone === "medium" && "border-amber-200 bg-amber-50",
-        tone === "high" && "border-red-200 bg-red-50",
+        "rounded-lg border p-3",
+        tone === "default" && "border-black/10 bg-[#fffdf9]",
+        tone === "low" && "border-emerald-300/60 bg-emerald-50",
+        tone === "medium" && "border-amber-300/60 bg-amber-50",
+        tone === "high" && "border-red-300/60 bg-red-50",
       )}
     >
       <div className="text-xs uppercase tracking-[0.16em] text-[#6d7a75]">{label}</div>
@@ -892,8 +700,8 @@ function BadgeTag({ label, tone }: { label: string; tone: "green" | "slate" }) {
     <span
       className={cn(
         "rounded-full px-2.5 py-1 text-xs font-medium",
-        tone === "green" && "bg-[#edf6f1] text-[#165c49]",
-        tone === "slate" && "bg-[#eef1ea] text-[#5c6762]",
+        tone === "green" && "bg-emerald-100 text-emerald-700",
+        tone === "slate" && "bg-[#ede8dc] text-[#53605c]",
       )}
     >
       {label}
@@ -907,9 +715,9 @@ function RiskBadge({ score }: { score?: number }) {
     <span
       className={cn(
         "inline-flex rounded-full px-3 py-1 text-xs font-semibold",
-        label.startsWith("Low") && "bg-emerald-50 text-emerald-700",
-        label.startsWith("Medium") && "bg-amber-50 text-amber-700",
-        label.startsWith("High") && "bg-red-50 text-red-700",
+        label.startsWith("Low") && "bg-emerald-100 text-emerald-700",
+        label.startsWith("Medium") && "bg-amber-100 text-amber-700",
+        label.startsWith("High") && "bg-red-100 text-red-700",
       )}
     >
       {label}
@@ -919,7 +727,7 @@ function RiskBadge({ score }: { score?: number }) {
 
 function DetailRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg border border-black/10 bg-white p-3">
+    <div className="rounded-xl border border-black/10 bg-[#f7f4ec] p-3">
       <div className="text-xs uppercase tracking-[0.16em] text-[#6d7a75]">{label}</div>
       <div className="mt-1 text-sm leading-6 text-[#16201d]">{value}</div>
     </div>

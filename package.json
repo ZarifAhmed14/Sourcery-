@@ -10,6 +10,8 @@
     "typecheck": "tsc --noEmit --pretty false",
     "db:seed": "node scripts/seed-suppliers.mjs",
     "db:seed:rich": "node scripts/upsert-rich-suppliers.mjs",
+    "db:seed:expanded": "python scripts/build_expanded_supplier_datasets.py --upsert",
+    "db:dataset:expanded": "python scripts/build_expanded_supplier_datasets.py",
     "db:embed": "node scripts/embed-suppliers.mjs",
     "db:verify:public": "node scripts/verify-supabase-public.mjs",
     "db:verify": "node scripts/verify-supabase.mjs",

@@ -83,20 +83,20 @@ export default function ComparePage() {
 
   return (
     <div className="space-y-6">
-      <section className="rounded-lg border border-black/10 bg-[#16201d] p-7 text-[#f7f4ec] shadow-sm md:p-8">
+      <section className="rounded-2xl border border-black/10 bg-white/78 p-7 text-[#16201d] shadow-sm md:p-8">
         <div className="flex flex-wrap items-start justify-between gap-6">
           <div className="max-w-3xl">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#d9b44a]">Decision desk</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#7a5b0f]">Decision desk</p>
             <h1 className="mt-3 text-5xl font-semibold leading-none tracking-tight md:text-6xl">Compare the shortlist.</h1>
-            <p className="mt-4 text-sm leading-6 text-[#bdc8c2]">Query: {result.meta.query}</p>
+            <p className="mt-4 text-sm leading-6 text-[#5d6965]">Query: {result.meta.query}</p>
           </div>
-          <div className="grid min-w-[240px] gap-2 rounded-lg border border-white/10 bg-white/[0.04] p-4 text-sm">
-            <span className="text-[#bdc8c2]">Leading supplier</span>
-            <strong className="text-lg text-white">{best.name}</strong>
+          <div className="grid min-w-[240px] gap-2 rounded-xl border border-black/10 bg-[#fffdf9] p-4 text-sm">
+            <span className="text-[#6d7a75]">Leading supplier</span>
+            <strong className="text-lg text-[#16201d]">{best.name}</strong>
             <span className="text-[#bdc8c2]">
               {best.city}, {best.country} · risk {best.risk_score}/100
             </span>
-            <Button onClick={exportCsv} disabled={exporting} className="mt-2 rounded-md bg-[#d9b44a] text-[#16201d] hover:bg-[#e6c45b]">
+            <Button onClick={exportCsv} disabled={exporting} className="mt-2 rounded-md bg-[#16201d] text-[#f7f4ec] hover:bg-[#24332f]">
               {exporting ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Download className="mr-1.5 h-4 w-4" />}
               Export CSV
             </Button>

@@ -1,23 +1,11 @@
 import Link from "next/link"
 import {
   ArrowRight,
-  BadgeCheck,
-  BarChart3,
-  Boxes,
-  Brain,
-  CheckCircle2,
   Database,
-  Factory,
-  Globe2,
   LineChart,
   Lock,
   MapPin,
   Radar,
-  Search,
-  ShieldCheck,
-  Sparkles,
-  TrendingUp,
-  Zap,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
@@ -28,24 +16,24 @@ const supplierRows = [
 ]
 
 const workflow = [
-  ["Data", "300 synthetic suppliers plus public-source rows, normalized into one sourcing schema."],
-  ["Retrieval", "Semantic and rule-based ranking across price, MOQ, lead time, region, and certifications."],
-  ["AI", "Explainable sourcing briefs, risk notes, bargaining drafts, and deterministic fallbacks."],
-  ["Governance", "Rate limits, cache, telemetry, RLS-ready schema, and health checks for judging."],
+  ["1. Describe your need", "Tell Sourcery what product you want, your budget, quantity target, and how fast you need delivery."],
+  ["2. Review suppliers", "Sourcery ranks supplier options and shows price, lead time, risk level, and match quality in one place."],
+  ["3. Compare business impact", "Use the compare view to see which supplier gives the strongest balance of cost, speed, and margin."],
+  ["4. Reach out with confidence", "Generate a ready-to-use supplier message after you choose the strongest option for your business."],
 ]
 
-const capabilities = [
-  { icon: Search, title: "Find suppliers", text: "Turn a messy buying brief into ranked supplier candidates." },
-  { icon: ShieldCheck, title: "Read the risk", text: "See risk score, flags, certifications, and why each supplier was picked." },
-  { icon: TrendingUp, title: "Model margin", text: "Estimate landed cost, selling price, fees, and profit before outreach." },
-  { icon: Brain, title: "Negotiate faster", text: "Generate supplier-ready bargaining messages from the selected supplier context." },
+const proofItems = [
+  ["Find suppliers", "Turn a messy buying brief into ranked supplier candidates."],
+  ["Read the risk", "See risk score, flags, certifications, and why each supplier was picked."],
+  ["Model margin", "Estimate landed cost, selling price, fees, and profit before outreach."],
+  ["Negotiate faster", "Generate supplier-ready bargaining messages from the selected supplier context."],
 ]
 
 export default function HomePage() {
   return (
     <div className="min-h-screen overflow-x-hidden bg-[#f7f4ec] text-[#16201d]">
       <header className="fixed left-0 right-0 top-0 z-50 border-b border-black/10 bg-[#f7f4ec]/82 backdrop-blur-xl">
-          <div className="mx-auto grid h-16 w-full max-w-7xl grid-cols-[auto_1fr_auto] items-center px-5 md:px-8">
+        <div className="mx-auto grid h-16 w-full max-w-7xl grid-cols-[auto_1fr_auto] items-center px-5 md:px-8">
           <Link href="/" className="flex items-center gap-3">
             <span className="grid h-9 w-9 place-items-center rounded-md bg-[#16201d] text-sm font-black text-[#f7f4ec]">
               SQ
@@ -57,10 +45,14 @@ export default function HomePage() {
           </Link>
           <nav className="hidden items-center justify-self-center gap-7 text-sm text-[#53605c] md:flex">
             <Link href="/app" className="hover:text-[#16201d]">Workspace</Link>
-            <a href="#proof" className="hover:text-[#16201d]">Proof</a>
-            <a href="#system" className="hover:text-[#16201d]">System</a>
+            <a href="#suppliers" className="hover:text-[#16201d]">Suppliers</a>
+            <Link href="/app/workflow" className="hover:text-[#16201d]">How it works</Link>
           </nav>
-          <div className="hidden md:block" />
+          <div className="justify-self-end">
+            <Button asChild variant="outline" className="hidden h-10 rounded-md border-black/10 bg-white/70 px-4 text-[#16201d] hover:bg-white md:inline-flex">
+              <Link href="/auth/login">Log in</Link>
+            </Button>
+          </div>
         </div>
       </header>
 
@@ -68,14 +60,10 @@ export default function HomePage() {
         <section className="relative min-h-screen border-b border-black/10 pt-16">
           <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(22,32,29,0.08)_1px,transparent_1px),linear-gradient(180deg,rgba(22,32,29,0.08)_1px,transparent_1px)] bg-[size:54px_54px]" />
           <div className="absolute inset-x-0 bottom-0 h-64 bg-gradient-to-t from-[#f7f4ec] to-transparent" />
-          <div className="relative mx-auto grid min-h-[calc(100vh-4rem)] max-w-7xl items-center gap-10 px-5 py-12 md:grid-cols-[1.02fr_0.98fr] md:px-8">
+          <div className="relative mx-auto grid min-h-[calc(100vh-4rem)] max-w-7xl items-start gap-10 px-5 py-12 md:grid-cols-[1.02fr_0.98fr] md:px-8">
             <div className="w-[calc(100vw-40px)] min-w-0 max-w-3xl md:w-auto">
-              <div className="mb-7 inline-flex items-center gap-2 rounded-md border border-[#cdbb89] bg-[#fff8df] px-3 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-[#7a5b0f]">
-                <Sparkles className="h-4 w-4" />
-                BuildFest 2026 sourcing agent
-              </div>
               <h1 className="max-w-[350px] text-balance font-serif text-6xl leading-[0.9] tracking-normal text-[#13201b] md:max-w-full md:text-8xl lg:text-9xl">
-                Find the supplier before your competitor does.
+                Find the best supplier for your business.
               </h1>
               <p className="mt-8 max-w-[340px] text-lg leading-8 text-[#53605c] md:max-w-2xl md:text-xl">
                 Sourcery turns a product idea into ranked suppliers, risk signals, negotiation drafts, and profit math. It is built for small brands that need sourcing intelligence without a procurement department.
@@ -83,31 +71,23 @@ export default function HomePage() {
               <div className="mt-9 flex flex-wrap gap-3">
                 <Button asChild size="lg" className="h-12 rounded-md bg-[#16201d] px-6 text-[#f7f4ec] hover:bg-[#24332f]">
                   <Link href="/app">
-                    Run the live sourcing workspace
+                    Open the workspace
                     <ArrowRight className="ml-2 h-4 w-4" />
                   </Link>
                 </Button>
-                <Button asChild size="lg" variant="outline" className="h-12 rounded-md border-[#16201d]/20 bg-white/40 px-6">
-                  <Link href="/app">Open the workspace</Link>
-                </Button>
-              </div>
-            <div className="mt-10 grid max-w-2xl grid-cols-1 divide-y divide-black/10 border-y border-black/10 bg-white/35 min-[520px]:grid-cols-3 min-[520px]:divide-x min-[520px]:divide-y-0">
-                <Metric value="300+" label="synthetic supplier rows" />
-                <Metric value="10" label="public-source sample rows" />
-                <Metric value="<60s" label="judge-safe API response" />
               </div>
             </div>
 
-            <div className="relative min-w-0">
+            <div className="relative min-w-0 self-start pt-2">
               <div className="absolute -left-8 -top-8 h-40 w-40 rounded-full bg-[#d9b44a]/25 blur-3xl" />
-              <div className="absolute -bottom-8 -right-10 h-48 w-48 rounded-full bg-[#2e7d65]/20 blur-3xl" />
+              <div className="absolute -bottom-8 -right-10 h-48 w-48 rounded-full bg-[#16201d]/12 blur-3xl" />
               <div className="relative w-full min-w-0 max-w-full overflow-hidden rounded-lg border border-[#16201d]/15 bg-[#101917] shadow-2xl shadow-[#16201d]/25">
                 <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
                   <div className="flex items-center gap-2 text-[#f5efe0]">
                     <Radar className="h-5 w-5 text-[#d9b44a]" />
                     <span className="text-sm font-semibold">Sourcing Run</span>
                   </div>
-                  <span className="rounded-md bg-[#1d3d33] px-2 py-1 text-xs font-medium text-[#9cf0c9]">Bangladesh Mode</span>
+                  <span className="rounded-md border border-[#d9b44a]/30 bg-[#2d2414] px-2 py-1 text-xs font-medium text-[#f0d58d]">Bangladesh Mode</span>
                 </div>
                 <div className="grid min-w-0 border-b border-white/10 md:grid-cols-[0.78fr_1.22fr]">
                   <div className="min-w-0 space-y-4 border-r border-white/10 p-5">
@@ -138,7 +118,7 @@ export default function HomePage() {
                                 {row.place}
                               </p>
                             </div>
-                            <span className="rounded-md border border-[#9cf0c9]/25 bg-[#12362d] px-2 py-1 text-xs text-[#9cf0c9]">
+                            <span className="rounded-md border border-[#d9b44a]/25 bg-[#2d2414] px-2 py-1 text-xs text-[#f0d58d]">
                               Fit {row.fit}%
                             </span>
                           </div>
@@ -163,28 +143,53 @@ export default function HomePage() {
           </div>
         </section>
 
-        <section id="workspace" className="border-b border-black/10 bg-[#fffaf0] py-24">
+        <section id="suppliers" className="border-b border-black/10 bg-[#fffaf0] py-24">
           <div className="mx-auto max-w-7xl px-5 md:px-8">
             <div className="max-w-3xl">
-              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#7a5b0f]">AI Development Workflow</p>
-              <h2 className="mt-4 font-serif text-5xl leading-none md:text-7xl">Built to check the boxes and survive the demo.</h2>
+              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#7a5b0f]">Suppliers</p>
+              <h2 className="mt-4 font-serif text-5xl leading-none md:text-7xl">Browse the supplier base before you run a sourcing brief.</h2>
+              <p className="mt-4 max-w-2xl text-lg leading-8 text-[#5e6a66]">
+                Judges can see the kind of supplier data Sourcery works with: category, location, fit, risk, price, and lead-time context before the AI ranking layer takes over.
+              </p>
             </div>
-            <div className="mt-12 grid gap-4 md:grid-cols-4">
-              {workflow.map(([title, text], index) => (
-                <div key={title} className="rounded-lg border border-black/10 bg-[#f7f4ec] p-5">
-                  <div className="mb-8 flex h-10 w-10 items-center justify-center rounded-md bg-[#16201d] text-sm font-semibold text-[#f7f4ec]">
-                    0{index + 1}
-                  </div>
-                  <h3 className="text-lg font-semibold">{title}</h3>
-                  <p className="mt-3 text-sm leading-6 text-[#5e6a66]">{text}</p>
+            <div className="mt-12 grid gap-6 lg:grid-cols-[1.15fr_0.85fr]">
+              <div className="overflow-hidden rounded-3xl border border-black/10 bg-white shadow-sm">
+                <div className="grid grid-cols-[1.4fr_0.8fr_0.6fr_0.55fr_0.55fr] gap-3 bg-[#eef1ea] px-5 py-4 text-xs font-semibold uppercase tracking-[0.16em] text-[#6d7a75]">
+                  <span>Supplier</span>
+                  <span>Location</span>
+                  <span>Unit</span>
+                  <span>Lead</span>
+                  <span>Risk</span>
                 </div>
-              ))}
+                {supplierRows.map((row) => (
+                  <div key={row.name} className="grid grid-cols-[1.4fr_0.8fr_0.6fr_0.55fr_0.55fr] gap-3 border-t border-black/10 px-5 py-4 text-sm">
+                    <div>
+                      <div className="font-semibold text-[#16201d]">{row.name}</div>
+                      <div className="mt-1 text-xs text-[#6d7a75]">Fit {row.fit}%</div>
+                    </div>
+                    <span className="text-[#53605c]">{row.place}</span>
+                    <span className="font-medium text-[#16201d]">{row.price}</span>
+                    <span className="text-[#53605c]">{row.lead}</span>
+                    <span className="text-[#53605c]">{row.risk}</span>
+                  </div>
+                ))}
+              </div>
+
+              <div className="rounded-3xl border border-black/10 bg-white p-8 shadow-sm">
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#7a5b0f]">Inside each supplier profile</p>
+                <div className="mt-6 space-y-4">
+                  <SupplierLandingItem label="Products supported" value="Jute totes, knitwear, cartons, beauty packaging, and more" />
+                  <SupplierLandingItem label="Operational detail" value="Unit price, MOQ, lead time, and country/region context" />
+                  <SupplierLandingItem label="Trust signals" value="Risk score, certifications, BGMEA badge, and sourcing notes" />
+                  <SupplierLandingItem label="Decision path" value="Shortlist, compare, profit model, and bargain draft generation" />
+                </div>
+              </div>
             </div>
           </div>
         </section>
 
-        <section id="proof" className="bg-[#16201d] py-24 text-[#f7f4ec]">
-          <div className="mx-auto grid max-w-7xl gap-10 px-5 md:grid-cols-[0.8fr_1.2fr] md:px-8">
+        <section className="bg-[#16201d] py-24 text-[#f7f4ec]">
+          <div className="mx-auto max-w-7xl px-5 md:px-8">
             <div>
               <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#d9b44a]">Product proof</p>
               <h2 className="mt-4 font-serif text-5xl leading-none md:text-7xl">Not a pretty shell. A real sourcing system.</h2>
@@ -192,49 +197,39 @@ export default function HomePage() {
                 Judges can see the data, the ranking logic, the fallback behavior, the risk layer, and the actual supplier workspace in one flow.
               </p>
             </div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              {capabilities.map((item) => (
-                <div key={item.title} className="rounded-lg border border-white/10 bg-white/[0.04] p-6">
-                  <item.icon className="h-6 w-6 text-[#d9b44a]" />
-                  <h3 className="mt-5 text-xl font-semibold">{item.title}</h3>
-                  <p className="mt-3 text-sm leading-6 text-[#bac5c0]">{item.text}</p>
+            <div className="mt-12 grid gap-4 md:grid-cols-4">
+              {proofItems.map(([title, text]) => (
+                <div key={title} className="rounded-lg border border-white/10 bg-white/[0.04] p-6">
+                  <h3 className="text-xl font-semibold">{title}</h3>
+                  <p className="mt-4 text-sm leading-6 text-[#bac5c0]">{text}</p>
                 </div>
               ))}
+            </div>
+            <div className="mt-8">
+              <Button asChild variant="outline" className="h-12 rounded-md border-white/15 bg-white/[0.04] px-6 text-[#f7f4ec] hover:bg-white/[0.08]">
+                <Link href="/app/workflow">
+                  Open how it works
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </Link>
+              </Button>
             </div>
           </div>
         </section>
 
-        <section id="system" className="border-b border-black/10 bg-[#f7f4ec] py-24">
+        <section className="border-b border-black/10 bg-[#f7f4ec] py-24">
           <div className="mx-auto max-w-7xl px-5 md:px-8">
-            <div className="grid gap-8 md:grid-cols-[1fr_1fr]">
-              <div className="rounded-lg border border-black/10 bg-white/55 p-7">
-                <Globe2 className="h-7 w-7 text-[#2e7d65]" />
-                <h2 className="mt-5 font-serif text-4xl">Supplier graph, ready for expansion.</h2>
-                <p className="mt-4 text-[#5e6a66]">
-                  The frontend presents verified and synthetic rows separately, so the demo can be honest while still feeling rich.
-                </p>
-                <div className="mt-6 grid grid-cols-2 gap-3 text-sm">
-                  {["Bangladesh Mode", "BGMEA flagging", "Risk score 0-100", "Public source URLs"].map((item) => (
-                    <div key={item} className="flex items-center gap-2 rounded-md bg-[#eef2e8] p-3">
-                      <CheckCircle2 className="h-4 w-4 text-[#2e7d65]" />
-                      {item}
-                    </div>
-                  ))}
-                </div>
-              </div>
-              <div className="rounded-lg border border-black/10 bg-white/55 p-7">
-                <Boxes className="h-7 w-7 text-[#2e7d65]" />
-                <h2 className="mt-5 font-serif text-4xl">From search to negotiation.</h2>
-                <p className="mt-4 text-[#5e6a66]">
-                  One workspace moves from supplier discovery to comparison, bargaining, and margin simulation without exposing database keys.
-                </p>
-                <div className="mt-6 flex flex-wrap gap-2">
-                  {["/api/source", "/api/suppliers", "/api/bargain", "/api/simulate", "/api/health"].map((item) => (
-                    <span key={item} className="rounded-md border border-black/10 bg-[#16201d] px-3 py-2 font-mono text-xs text-[#f7f4ec]">
-                      {item}
-                    </span>
-                  ))}
-                </div>
+            <div className="rounded-lg border border-dashed border-black/15 bg-white/55 p-10 text-center">
+              <h2 className="font-serif text-4xl">More homepage sections can go here next.</h2>
+              <p className="mt-4 text-lg text-[#5e6a66]">
+                We removed the extra system blocks for now to keep the homepage easier to understand.
+              </p>
+              <div className="mt-8 flex justify-center">
+                <Button asChild size="lg" className="h-12 rounded-md bg-[#16201d] px-6 text-[#f7f4ec] hover:bg-[#24332f]">
+                  <Link href="/app">
+                    Open Sourcery
+                    <ArrowRight className="ml-2 h-4 w-4" />
+                  </Link>
+                </Button>
               </div>
             </div>
           </div>
@@ -261,15 +256,6 @@ export default function HomePage() {
   )
 }
 
-function Metric({ value, label }: { value: string; label: string }) {
-  return (
-    <div className="p-4">
-      <div className="font-serif text-3xl">{value}</div>
-      <div className="mt-1 text-xs uppercase tracking-[0.14em] text-[#66736f]">{label}</div>
-    </div>
-  )
-}
-
 function PanelLabel({ children }: { children: React.ReactNode }) {
   return <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#d9b44a]">{children}</p>
 }
@@ -288,6 +274,15 @@ function MiniKpi({ label, value }: { label: string; value: string }) {
     <div>
       <div className="text-[10px] uppercase tracking-[0.14em] text-[#85928d]">{label}</div>
       <div className="mt-1 font-semibold text-[#f5efe0]">{value}</div>
+    </div>
+  )
+}
+
+function SupplierLandingItem({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-2xl border border-black/10 bg-[#f7f4ec] p-4">
+      <div className="text-xs font-semibold uppercase tracking-[0.16em] text-[#6d7a75]">{label}</div>
+      <div className="mt-2 text-sm leading-6 text-[#16201d]">{value}</div>
     </div>
   )
 }

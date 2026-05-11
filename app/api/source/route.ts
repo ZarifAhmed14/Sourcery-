@@ -25,6 +25,14 @@ export async function POST(req: Request) {
       topK: input.topK ?? 10,
       category: input.category,
       product: input.product,
+      country: input.country,
+      region: input.region,
+      targetUnitPriceMin: input.targetUnitPriceMin,
+      targetUnitPriceMax: input.targetUnitPriceMax,
+      orderQuantity: input.orderQuantity,
+      maxMOQ: input.maxMOQ,
+      maxLeadTimeDays: input.maxLeadTimeDays,
+      minQualityRating: input.minQualityRating,
       requestId,
     })
 

@@ -13,6 +13,15 @@ export function buildCacheKey(args: {
   bangladeshMode: boolean
   topK: number
   category?: string | null
+  product?: string | null
+  country?: string | null
+  region?: string | null
+  targetUnitPriceMin?: number | null
+  targetUnitPriceMax?: number | null
+  orderQuantity?: number | null
+  maxMOQ?: number | null
+  maxLeadTimeDays?: number | null
+  minQualityRating?: number | null
   aiProvider?: string
   version?: string
 }): string {
@@ -23,6 +32,15 @@ export function buildCacheKey(args: {
     `bd=${args.bangladeshMode ? 1 : 0}`,
     `k=${args.topK}`,
     `category=${args.category ?? "any"}`,
+    `product=${args.product ?? "any"}`,
+    `country=${args.country ?? "any"}`,
+    `region=${args.region ?? "any"}`,
+    `minPrice=${args.targetUnitPriceMin ?? "any"}`,
+    `maxPrice=${args.targetUnitPriceMax ?? "any"}`,
+    `qty=${args.orderQuantity ?? "any"}`,
+    `maxMOQ=${args.maxMOQ ?? "any"}`,
+    `maxLead=${args.maxLeadTimeDays ?? "any"}`,
+    `minQuality=${args.minQualityRating ?? "any"}`,
     `ai=${args.aiProvider ?? "unknown"}`,
   ].join("::")
   return createHash("sha256").update(raw).digest("hex")

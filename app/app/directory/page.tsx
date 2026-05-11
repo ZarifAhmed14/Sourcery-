@@ -1,5 +1,5 @@
-import { SupplierDirectoryBrowser } from "@/components/sourcery/supplier-directory-browser"
+import { redirect } from "next/navigation"
 
 export default function SupplierDirectoryPage() {
-  return <SupplierDirectoryBrowser />
+  redirect("/#suppliers")
 }

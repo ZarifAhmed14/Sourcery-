@@ -165,15 +165,15 @@ function HistoryShell({
 }) {
   return (
     <div className="space-y-6">
-      <section className="rounded-lg border border-black/10 bg-[#16201d] p-7 text-[#f7f4ec] shadow-sm">
+      <section className="rounded-2xl border border-black/10 bg-white/78 p-7 text-[#16201d] shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-5">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#d9b44a]">{eyebrow}</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#7a5b0f]">{eyebrow}</p>
             <h1 className="mt-3 font-serif text-5xl leading-none">{title}</h1>
-            <p className="mt-4 max-w-2xl text-sm leading-6 text-[#bdc8c2]">{subtitle}</p>
+            <p className="mt-4 max-w-2xl text-sm leading-6 text-[#5d6965]">{subtitle}</p>
           </div>
-          <div className="inline-flex items-center gap-2 rounded-md border border-white/10 bg-white/[0.04] px-3 py-2 text-sm text-[#e8eee9]">
-            <Cloud className="h-4 w-4 text-[#d9b44a]" />
+          <div className="inline-flex items-center gap-2 rounded-md border border-black/10 bg-[#fffdf9] px-3 py-2 text-sm text-[#16201d]">
+            <Cloud className="h-4 w-4 text-[#7a5b0f]" />
             {status}
           </div>
         </div>

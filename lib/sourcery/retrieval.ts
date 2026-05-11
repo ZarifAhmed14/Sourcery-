@@ -12,6 +12,17 @@ export type RetrievalResult = {
   mode: RetrievalMode
 }
 
+type BuyerFilters = {
+  country?: string | null
+  region?: Supplier["region"] | null
+  targetUnitPriceMin?: number | null
+  targetUnitPriceMax?: number | null
+  orderQuantity?: number | null
+  maxMOQ?: number | null
+  maxLeadTimeDays?: number | null
+  minQualityRating?: number | null
+}
+
 type SupplierRow = Record<string, unknown> & {
   similarity?: number | null
   retrieval_score?: number | null
@@ -60,13 +71,33 @@ function filterByCategoryWithFallback(suppliers: Supplier[], category: SupplierC
   return filtered.length > 0 ? filtered : suppliers
 }
 
+function normalizeCountryFilter(value?: string | null): string | null {
+  const normalized = value?.trim().toLowerCase()
+  if (!normalized || normalized === "any") return null
+  return normalized
+}
+
+function applyBuyerFilters(suppliers: Supplier[], filters: BuyerFilters): Supplier[] {
+  const country = normalizeCountryFilter(filters.country)
+  return suppliers.filter((supplier) => {
+    if (country && supplier.country.toLowerCase() !== country) return false
+    if (filters.region && supplier.region !== filters.region) return false
+    if (typeof filters.targetUnitPriceMin === "number" && supplier.unit_price_usd < filters.targetUnitPriceMin) return false
+    if (typeof filters.targetUnitPriceMax === "number" && supplier.unit_price_usd > filters.targetUnitPriceMax) return false
+    if (typeof filters.maxMOQ === "number" && supplier.moq > filters.maxMOQ) return false
+    if (typeof filters.maxLeadTimeDays === "number" && supplier.lead_time_days > filters.maxLeadTimeDays) return false
+    if (typeof filters.minQualityRating === "number" && supplier.quality_rating < filters.minQualityRating) return false
+    return true
+  })
+}
+
 function hasDirectQueryMatch(supplier: Supplier, query: string, category: SupplierCategory | null): boolean {
   const tokens = tokenize(query)
   const haystack = supplierSearchHaystack(supplier)
   return (category !== null && supplier.category === category) || tokens.some((token) => haystack.includes(token))
 }
 
-function relevanceScore(supplier: Supplier, query: string, category: SupplierCategory | null): number {
+function relevanceScore(supplier: Supplier, query: string, category: SupplierCategory | null, filters: BuyerFilters): number {
   const tokens = tokenize(query)
   const haystack = supplierSearchHaystack(supplier)
   const matchedTokens = tokens.filter((token) => haystack.includes(token)).length
@@ -77,27 +108,45 @@ function relevanceScore(supplier: Supplier, query: string, category: SupplierCat
   const riskScore = Math.max(0, 10 - supplier.risk_score * 0.12)
   const leadScore = supplier.lead_time_days <= 30 ? 8 : supplier.lead_time_days <= 45 ? 4 : 0
   const moqScore = supplier.moq <= 500 ? 6 : supplier.moq <= 1000 ? 3 : 0
+  const orderQtyScore =
+    typeof filters.orderQuantity === "number"
+      ? supplier.moq <= filters.orderQuantity
+        ? 10
+        : Math.max(-12, -((supplier.moq - filters.orderQuantity) / Math.max(filters.orderQuantity, 1)) * 12)
+      : 0
   const bdIntent = /\b(bangladesh|bd|dhaka|chattogram|chittagong|local|nearby)\b/i.test(query)
   const bdScore = bdIntent && supplier.country === "Bangladesh" ? 22 : 0
   const juteScore = /\bjute\b/i.test(query) && haystack.includes("jute") ? 34 : 0
   const bagScore = /\b(bag|bags|tote|totes)\b/i.test(query) && /\b(bag|bags|tote|totes)\b/.test(haystack) ? 18 : 0
 
-  return tokenScore + vectorScore + categoryScore + qualityScore + riskScore + leadScore + moqScore + bdScore + juteScore + bagScore
+  return tokenScore + vectorScore + categoryScore + qualityScore + riskScore + leadScore + moqScore + orderQtyScore + bdScore + juteScore + bagScore
 }
 
-function rankSuppliersForQuery(suppliers: Supplier[], query: string, category: SupplierCategory | null, topK: number): Supplier[] {
+function rankSuppliersForQuery(
+  suppliers: Supplier[],
+  query: string,
+  category: SupplierCategory | null,
+  topK: number,
+  filters: BuyerFilters,
+): Supplier[] {
   const unique = uniqueSuppliers(suppliers)
-  const directlyMatched = unique.filter((supplier) => hasDirectQueryMatch(supplier, query, category))
-  const pool = directlyMatched.length > 0 ? directlyMatched : filterByCategoryWithFallback(unique, category)
+  const filteredUnique = applyBuyerFilters(unique, filters)
+  const directlyMatched = filteredUnique.filter((supplier) => hasDirectQueryMatch(supplier, query, category))
+  const pool = directlyMatched.length > 0 ? directlyMatched : filterByCategoryWithFallback(filteredUnique, category)
 
   return pool
-    .map((supplier) => ({ supplier, score: relevanceScore(supplier, query, category) }))
+    .map((supplier) => ({ supplier, score: relevanceScore(supplier, query, category, filters) }))
     .sort((a, b) => b.score - a.score || b.supplier.quality_rating - a.supplier.quality_rating)
     .slice(0, topK)
     .map(({ supplier, score }) => ({ ...supplier, retrieval_score: score / 100 }))
 }
 
-async function retrieveByVector(query: string, topK: number, category: SupplierCategory | null): Promise<Supplier[] | null> {
+async function retrieveByVector(
+  query: string,
+  topK: number,
+  category: SupplierCategory | null,
+  filters: BuyerFilters,
+): Promise<Supplier[] | null> {
   const embedding = await embedQuery(query)
   if (!embedding) return null
 
@@ -119,19 +168,25 @@ async function retrieveByVector(query: string, topK: number, category: SupplierC
 
   const rows = (data ?? []) as SupplierRow[]
   const suppliers = rows.map(normalizeSupplier)
-  return filterByCategoryWithFallback(suppliers, category)
+  return applyBuyerFilters(filterByCategoryWithFallback(suppliers, category), filters)
 }
 
-async function retrieveByFullText(query: string, topK: number, category: SupplierCategory | null): Promise<Supplier[]> {
+async function retrieveByFullText(
+  query: string,
+  topK: number,
+  category: SupplierCategory | null,
+  filters: BuyerFilters,
+): Promise<Supplier[]> {
   const supabase = getAdminClient()
-  const qb = supabase.from("suppliers").select("*").order("rating", { ascending: false }).limit(500)
+  const qb = supabase.from("suppliers").select("*").order("rating", { ascending: false }).limit(1500)
 
   const { data, error } = await qb
   if (error) throw new Error(`Supplier retrieval failed: ${error.message}`)
 
   const tokens = tokenize(query)
   const suppliers = ((data ?? []) as SupplierRow[]).map(normalizeSupplier)
-  const filtered = suppliers
+  const eligibleSuppliers = applyBuyerFilters(suppliers, filters)
+  const filtered = eligibleSuppliers
     .map((supplier) => ({
       supplier,
       score: tokens.filter((token) => supplierSearchHaystack(supplier).includes(token)).length,
@@ -140,21 +195,26 @@ async function retrieveByFullText(query: string, topK: number, category: Supplie
     .sort((a, b) => b.score - a.score || b.supplier.quality_rating - a.supplier.quality_rating)
     .map(({ supplier, score }) => ({ ...supplier, retrieval_score: score / Math.max(tokens.length, 1) }))
 
-  return filterByCategoryWithFallback(filtered.length ? filtered : suppliers, category).slice(0, Math.max(topK * 4, 40))
+  return filterByCategoryWithFallback(filtered.length ? filtered : eligibleSuppliers, category).slice(0, Math.max(topK * 4, 40))
 }
 
-export async function retrieveCandidates(query: string, topK = 20, categoryOverride?: SupplierCategory | null): Promise<RetrievalResult> {
+export async function retrieveCandidates(
+  query: string,
+  topK = 20,
+  categoryOverride?: SupplierCategory | null,
+  filters: BuyerFilters = {},
+): Promise<RetrievalResult> {
   const category = categoryOverride ?? detectCategory(query)
 
   if (!hasServiceSupabaseEnv()) {
-    return { suppliers: getDemoSuppliers(query, topK, category), mode: "deterministic" }
+    return { suppliers: applyBuyerFilters(getDemoSuppliers(query, topK, category), filters), mode: "deterministic" }
   }
 
   let vectorSuppliers: Supplier[] = []
   let vectorMode = false
 
   try {
-    const vector = await retrieveByVector(query, topK, category)
+    const vector = await retrieveByVector(query, topK, category, filters)
     if (vector && vector.length > 0) {
       vectorSuppliers = vector
       vectorMode = true
@@ -165,7 +225,7 @@ export async function retrieveCandidates(query: string, topK = 20, categoryOverr
 
   let fullTextSuppliers: Supplier[] = []
   try {
-    const fullText = await retrieveByFullText(query, topK, category)
+    const fullText = await retrieveByFullText(query, topK, category, filters)
     if (fullText.length > 0) {
       fullTextSuppliers = fullText
     }
@@ -173,12 +233,12 @@ export async function retrieveCandidates(query: string, topK = 20, categoryOverr
     console.log("[sourcery] full-text retrieval fallback:", (err as Error).message)
   }
 
-  const ranked = rankSuppliersForQuery([...vectorSuppliers, ...fullTextSuppliers], query, category, topK)
+  const ranked = rankSuppliersForQuery([...vectorSuppliers, ...fullTextSuppliers], query, category, topK, filters)
   if (ranked.length > 0) {
     return { suppliers: ranked, mode: vectorMode ? "vector" : "full_text" }
   }
 
-  return { suppliers: getDemoSuppliers(query, topK, category), mode: "deterministic" }
+  return { suppliers: applyBuyerFilters(getDemoSuppliers(query, topK, category), filters), mode: "deterministic" }
 }
 
 export function rescoreForBangladeshMode(suppliers: Supplier[], bangladeshMode: boolean, topK = 10): Supplier[] {

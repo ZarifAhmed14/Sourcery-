@@ -18,7 +18,7 @@ import { buildCacheKey, getCached, setCached } from "@/lib/sourcery/cache"
 import { detectCategory, retrieveCandidates, rescoreForBangladeshMode, type RetrievalMode } from "@/lib/sourcery/retrieval"
 import { recordSourceEvent } from "@/lib/sourcery/telemetry"
 import { isSupportedProduct, supportedProductHelpText } from "@/lib/sourcery/supported-products"
-import type { ApiMeta, Supplier, SupplierCategory } from "@/lib/types"
+import type { ApiMeta, Supplier, SupplierCategory, SupplierRegion } from "@/lib/types"
 import { ApiRequestError } from "@/lib/backend/http"
 
 export type SourcingResult = {
@@ -124,10 +124,41 @@ function buildUserPrompt(query: string, candidates: Supplier[], bangladeshMode: 
     .join("\n\n")
 }
 
-function buildSingleSupplierPrompt(query: string, supplier: Supplier, rank: number, bangladeshMode: boolean): string {
+function buildBuyerFiltersBlock(filters: {
+  country?: string | null
+  region?: SupplierRegion | null
+  targetUnitPriceMin?: number | null
+  targetUnitPriceMax?: number | null
+  orderQuantity?: number | null
+  maxMOQ?: number | null
+  maxLeadTimeDays?: number | null
+  minQualityRating?: number | null
+}): string {
+  const lines = [
+    filters.country ? `country: ${filters.country}` : null,
+    filters.region ? `region: ${filters.region}` : null,
+    typeof filters.targetUnitPriceMin === "number" ? `target_unit_price_min: ${filters.targetUnitPriceMin}` : null,
+    typeof filters.targetUnitPriceMax === "number" ? `target_unit_price_max: ${filters.targetUnitPriceMax}` : null,
+    typeof filters.orderQuantity === "number" ? `order_quantity: ${filters.orderQuantity}` : null,
+    typeof filters.maxMOQ === "number" ? `max_moq: ${filters.maxMOQ}` : null,
+    typeof filters.maxLeadTimeDays === "number" ? `max_lead_time_days: ${filters.maxLeadTimeDays}` : null,
+    typeof filters.minQualityRating === "number" ? `min_quality_rating: ${filters.minQualityRating}` : null,
+  ].filter(Boolean)
+
+  return lines.length > 0 ? `BUYER_FILTERS:\n${lines.join("\n")}` : ""
+}
+
+function buildSingleSupplierPrompt(
+  query: string,
+  supplier: Supplier,
+  rank: number,
+  bangladeshMode: boolean,
+  buyerFilters: string,
+): string {
   return [
     `BUYER_BRIEF:\n${query}`,
     bangladeshMode ? BANGLADESH_MODE_PROMPT : "",
+    buyerFilters,
     `SUPPLIER:\n${JSON.stringify(leanSupplier(supplier), null, 0)}`,
     `Return strict JSON only with this exact shape:
 {
@@ -276,6 +307,7 @@ async function callSingleSupplierAgents(
   suppliers: Supplier[],
   query: string,
   bangladeshMode: boolean,
+  buyerFilters: string,
 ): Promise<{ output: CombinedAgentOutput; provider: Exclude<AiGenerationProvider, "none"> }> {
   const items: Array<{
     output: SingleSupplierAgentOutput
@@ -289,7 +321,7 @@ async function callSingleSupplierAgents(
         "Score exactly one supplier for discovery, risk, and comparison.",
         "Return valid JSON only. Use the numeric supplier row fields; do not invent data.",
       ].join("\n"),
-      prompt: buildSingleSupplierPrompt(query, supplier, index + 1, bangladeshMode),
+      prompt: buildSingleSupplierPrompt(query, supplier, index + 1, bangladeshMode, buyerFilters),
       maxOutputTokens: 900,
       schema: SingleSupplierAgentOutputSchema,
     })
@@ -338,6 +370,7 @@ async function runAgentWithFallback(
   suppliers: Supplier[],
   query: string,
   bangladeshMode: boolean,
+  buyerFilters: string,
   sourceProvider: AiGenerationProvider = getAiGenerationProvider(),
 ): Promise<{ output: CombinedAgentOutput; mode: "ai" | "deterministic_fallback"; provider: AiGenerationProvider }> {
   const fallback = deterministicOutput(suppliers, query, bangladeshMode)
@@ -349,7 +382,7 @@ async function runAgentWithFallback(
 
   try {
     if (configuredProvider === "pollinations") {
-      const lite = await callSingleSupplierAgents(suppliers, query, bangladeshMode)
+      const lite = await callSingleSupplierAgents(suppliers, query, bangladeshMode, buyerFilters)
       const repaired = completeAndRepair(lite.output, suppliers, fallback)
       const invalid = [...repaired.discovery, ...repaired.risk, ...repaired.comparison].some((item) => !validateExplainability(item))
       if (!invalid) return { output: repaired, mode: "ai", provider: lite.provider }
@@ -413,6 +446,14 @@ export async function runSourcingOrchestrator(args: {
   topK?: number
   category?: SupplierCategory | null
   product?: string | null
+  country?: string | null
+  region?: SupplierRegion | null
+  targetUnitPriceMin?: number | null
+  targetUnitPriceMax?: number | null
+  orderQuantity?: number | null
+  maxMOQ?: number | null
+  maxLeadTimeDays?: number | null
+  minQualityRating?: number | null
   requestId?: string
 }): Promise<SourcingResult> {
   const startedAt = Date.now()
@@ -440,6 +481,15 @@ export async function runSourcingOrchestrator(args: {
     bangladeshMode: args.bangladeshMode,
     topK,
     category: detectedCategory,
+    product: args.product,
+    country: args.country,
+    region: args.region,
+    targetUnitPriceMin: args.targetUnitPriceMin,
+    targetUnitPriceMax: args.targetUnitPriceMax,
+    orderQuantity: args.orderQuantity,
+    maxMOQ: args.maxMOQ,
+    maxLeadTimeDays: args.maxLeadTimeDays,
+    minQualityRating: args.minQualityRating,
     aiProvider: sourceProvider,
   })
   const cached = await getCached<SourcingResult>(cacheKey)
@@ -455,14 +505,33 @@ export async function runSourcingOrchestrator(args: {
     }
   }
 
-  const retrieval = await retrieveCandidates(args.query, 20, detectedCategory)
+  const retrieval = await retrieveCandidates(args.query, 20, detectedCategory, {
+    country: args.country,
+    region: args.region,
+    targetUnitPriceMin: args.targetUnitPriceMin,
+    targetUnitPriceMax: args.targetUnitPriceMax,
+    orderQuantity: args.orderQuantity,
+    maxMOQ: args.maxMOQ,
+    maxLeadTimeDays: args.maxLeadTimeDays,
+    minQualityRating: args.minQualityRating,
+  })
   if (retrieval.suppliers.length === 0) {
     throw new Error("No supplier candidates are available. Seed Supabase first, then rerun the query.")
   }
 
   const suppliers = rescoreForBangladeshMode(retrieval.suppliers, args.bangladeshMode, topK)
-  const prompt = buildUserPrompt(args.query, suppliers, args.bangladeshMode)
-  const agent = await runAgentWithFallback(prompt, suppliers, args.query, args.bangladeshMode, sourceProvider)
+  const buyerFilters = buildBuyerFiltersBlock({
+    country: args.country,
+    region: args.region,
+    targetUnitPriceMin: args.targetUnitPriceMin,
+    targetUnitPriceMax: args.targetUnitPriceMax,
+    orderQuantity: args.orderQuantity,
+    maxMOQ: args.maxMOQ,
+    maxLeadTimeDays: args.maxLeadTimeDays,
+    minQualityRating: args.minQualityRating,
+  })
+  const prompt = [buildUserPrompt(args.query, suppliers, args.bangladeshMode), buyerFilters].filter(Boolean).join("\n\n")
+  const agent = await runAgentWithFallback(prompt, suppliers, args.query, args.bangladeshMode, buyerFilters, sourceProvider)
 
   const result = buildResult({
     query: args.query,
