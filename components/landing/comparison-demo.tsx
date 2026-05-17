@@ -183,8 +183,8 @@ export function ComparisonDemo() {
               {/* Bold prefix to signal who is talking. */}
               <span className="font-medium text-foreground">Why Padma Knit Composite:</span>{" "}
               {/* Reasoning text mimicking the real Discovery Agent output. */}
-              97% on-time rate, GOTS + BSCI certified, $6.40/unit lands under target, 22-day lead
-              fits the launch window. Bangladesh Mode score adjustment applied.
+              97% on-time rate, GOTS + BSCI certified, $6.40/unit lands under target, and the 22-day lead
+              fits the launch window. The workspace can show supplier prices in USD or BDT.
             </p>
             {/* Action chip — opens deeper view in the app. */}
             <span className="inline-flex items-center gap-2 rounded-full border border-border bg-background px-4 py-2 text-xs uppercase tracking-[0.18em] text-foreground">

@@ -4,7 +4,6 @@ import {
   Database,
   FileSearch,
   LineChart,
-  MessageSquareText,
   Network,
   ShieldAlert,
   Sparkles,
@@ -36,12 +35,6 @@ const stages = [
     detail: "Reviews supplier risk score, lead time, MOQ, on-time rate, source type, certifications, and regional factors.",
   },
   {
-    title: "Bargain Agent",
-    icon: MessageSquareText,
-    subtitle: "Gemini-powered outreach",
-    detail: "Generates a short supplier-ready negotiation message using the chosen supplier, product, quantity, MOQ, price, and lead time.",
-  },
-  {
     title: "Simulation Agent",
     icon: LineChart,
     subtitle: "Deterministic profit engine",
@@ -52,7 +45,7 @@ const stages = [
 const workflowChecks = [
   ["Problem Definition", "Supplier discovery is slow, noisy, and risky for small businesses without procurement teams."],
   ["Architecture Design", "Landing page, guided app workspace, API routes, Supabase, pgvector, Gemini, deterministic fallbacks."],
-  ["Prompt Engineering", "Structured generation paths for sourcing explanations and bargain messages, with fallback repair paths."],
+  ["Prompt Engineering", "Structured generation paths for sourcing explanations, with fallback repair paths."],
   ["Knowledge Layer Setup", "84 supplier rows, embeddings, match_suppliers RPC, source labels, cache, and telemetry."],
   ["AI Model Integration", "Gemini handles generation; retrieval and simulation stay deterministic for demo reliability."],
   ["Testing & Validation", "Typecheck, production build, db verify, API smoke test, and guided demo query set."],
@@ -77,7 +70,7 @@ export default function WorkflowPage() {
               Judge demo pipeline
             </div>
             <div className="mt-5 grid gap-3">
-              {["Choose category/product", "Run supplier intelligence", "Inspect supplier", "Generate bargain draft", "Simulate margin"].map((item, index) => (
+              {["Choose category/product", "Run supplier intelligence", "Inspect supplier", "Compare options", "Simulate margin"].map((item, index) => (
                 <div key={item} className="flex items-center gap-3 rounded-md border border-white/10 bg-[#0d1714] p-3">
                   <span className="grid h-7 w-7 place-items-center rounded bg-[#d9b44a] text-xs font-black text-[#16201d]">{index + 1}</span>
                   <span className="text-sm text-[#e8eee9]">{item}</span>
@@ -120,7 +113,7 @@ export default function WorkflowPage() {
           <div>
             <h2 className="text-xl font-semibold text-[#16201d]">Why AI is required</h2>
             <p className="mt-2 text-sm leading-6 text-[#5d6965]">
-              Supplier sourcing is not just search. Buyers need relevance, risk interpretation, negotiation language, and
+              Supplier sourcing is not just search. Buyers need relevance, risk interpretation, and
               cost tradeoffs. Sourcery combines retrieval with AI generation and deterministic validation so decisions are
               explainable instead of just keyword matches.
             </p>

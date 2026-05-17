@@ -8,7 +8,7 @@ import { BangladeshToggle } from "@/components/sourcery/bangladesh-toggle"
 import { cn } from "@/lib/utils"
 
 const LINKS = [
-  { href: "/app", label: "Sourcing" },
+  { href: "/app", label: "Workspace" },
   { href: "/app/dashboard", label: "Saved Searches" },
 ]
 
@@ -21,7 +21,7 @@ export function AppNav({ user }: { user: UserInfo }) {
 
   return (
     <header className="sticky top-0 z-30 w-full border-b border-black/10 bg-[#f7f4ec]/92 backdrop-blur-xl">
-      <div className="mx-auto flex min-h-16 w-full max-w-[1680px] flex-wrap items-center justify-between gap-3 px-8 py-3 md:flex-nowrap md:px-10 xl:px-14">
+      <div className="flex min-h-16 w-full flex-wrap items-center justify-between gap-3 px-4 py-3 md:flex-nowrap md:px-6 xl:px-8">
         <Link href="/" className="flex shrink-0 items-center gap-3">
           <span className="grid h-9 w-9 place-items-center rounded-md bg-[#d9b44a] text-xs font-black text-[#16201d]">
             SQ

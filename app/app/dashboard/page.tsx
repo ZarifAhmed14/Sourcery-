@@ -74,18 +74,18 @@ export default async function DashboardPage() {
       <HistoryShell
         eyebrow="Cloud history"
         title="No saved runs yet"
-        subtitle="Every signed-in sourcing run will appear here for re-runs and audit trail review."
+        subtitle="Every signed-in supplier search will appear here for re-runs and audit trail review."
         status="Synced to Supabase"
       >
         <Empty className="rounded-lg border border-black/10 bg-white py-14 shadow-sm">
           <EmptyHeader>
             <EmptyTitle>No saved runs yet</EmptyTitle>
-            <EmptyDescription>Run supplier intelligence once and this page becomes your sourcing memory.</EmptyDescription>
+            <EmptyDescription>Find suppliers once and this page becomes your search memory.</EmptyDescription>
           </EmptyHeader>
           <EmptyContent>
             <Button asChild className="rounded-md bg-[#16201d] text-[#f7f4ec] hover:bg-[#22312d]">
               <Link href="/app">
-                Run sourcing
+                Find suppliers
                 <ArrowRight className="ml-1.5 h-4 w-4" />
               </Link>
             </Button>

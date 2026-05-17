@@ -32,12 +32,12 @@ export function LocalRecentList() {
       <Empty className="rounded-2xl border border-border/70 bg-card py-16">
         <EmptyHeader>
           <EmptyTitle>No recent searches</EmptyTitle>
-          <EmptyDescription>Sourcing runs you complete will show up here for one-click re-runs.</EmptyDescription>
+          <EmptyDescription>Supplier searches you complete will show up here for one-click re-runs.</EmptyDescription>
         </EmptyHeader>
         <EmptyContent>
           <Button asChild className="rounded-full">
             <Link href="/app">
-              Go to Sourcing
+              Go to Workspace
               <ArrowRight className="ml-1.5 h-4 w-4" />
             </Link>
           </Button>

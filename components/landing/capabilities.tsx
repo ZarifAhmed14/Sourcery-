@@ -27,8 +27,8 @@ export function Capabilities() {
       n: "03",
       title: "Negotiate",
       body:
-        "Bargain Copilot drafts outreach, counter-offers, and sample requests in your voice — and in the supplier's language. Bangladesh Mode generates Bangla messages for South-Asian partners.",
-      tags: ["Bargain Copilot", "Bangla outreach", "Tone-matched"],
+        "Sourcery turns the selected supplier context into clear next-step guidance for outreach, samples, and price checks before the buyer commits.",
+      tags: ["Buyer guidance", "Sample checks", "Price context"],
     },
     {
       n: "04",

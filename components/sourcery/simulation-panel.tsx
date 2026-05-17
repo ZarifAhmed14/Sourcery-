@@ -10,10 +10,13 @@ import { Slider } from "@/components/ui/slider"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
+import { TermLabel } from "@/components/sourcery/term-help"
 import { runSimulation, defaultDeltas, type SimulationDeltas } from "@/lib/simulate"
-import { rankProfit, formatUSD, type ProfitInputs } from "@/lib/profit"
+import { rankProfit, type ProfitInputs } from "@/lib/profit"
 import type { Supplier } from "@/lib/types"
 import { cn } from "@/lib/utils"
+import { formatMoney } from "@/lib/currency"
+import { usePreferences } from "@/lib/preferences-context"
 
 type Props = {
   // Suppliers in the comparison.
@@ -30,10 +33,11 @@ function buildRankChangeExplainer(prevName: string, newName: string, d: Simulati
   if (d.supplier_price_delta_pct !== 0) parts.push(`${d.supplier_price_delta_pct > 0 ? "+" : ""}${d.supplier_price_delta_pct}% supplier price`)
   if (d.lead_time_delta_days !== 0) parts.push(`${d.lead_time_delta_days > 0 ? "+" : ""}${d.lead_time_delta_days}d lead time`)
   const phrase = parts.length ? parts.join(", ") : "your input changes"
-  return `${newName} overtakes ${prevName} once you apply ${phrase} — the ranking shifts because the risk-adjusted profit recomputes against the new landed cost.`
+  return `${newName} moves ahead of ${prevName} after ${phrase}. The recommendation changed because Sourcery recalculated landed cost, margin, lead-time pressure, and risk-adjusted profit with the new assumptions.`
 }
 
 export function SimulationPanel({ suppliers, baseInputs }: Props) {
+  const { bangladeshMode } = usePreferences()
   // Drawer open state.
   const [open, setOpen] = useState(true)
   // Local delta state — defaults match the base inputs (no change).
@@ -130,9 +134,9 @@ export function SimulationPanel({ suppliers, baseInputs }: Props) {
           <div className="overflow-hidden rounded-lg border border-black/10">
             <div className="grid grid-cols-12 gap-3 border-b border-black/10 bg-[#eef1ea] px-4 py-2 text-[11px] uppercase tracking-[0.16em] text-[#6d7a75]">
               <div className="col-span-5">Supplier</div>
-              <div className="col-span-2 text-right">Base rank</div>
-              <div className="col-span-2 text-right">New rank</div>
-              <div className="col-span-3 text-right">Sim total profit</div>
+              <div className="col-span-2 text-right"><TermLabel label="Base rank" /></div>
+              <div className="col-span-2 text-right"><TermLabel label="New rank" /></div>
+              <div className="col-span-3 text-right"><TermLabel label="Sim total profit" /></div>
             </div>
             {sim.simResults.map((r) => {
               const supplier = supplierById.get(r.supplier_id)
@@ -154,7 +158,7 @@ export function SimulationPanel({ suppliers, baseInputs }: Props) {
                       </span>
                     )}
                   </div>
-                  <div className="col-span-3 text-right font-mono text-sm tabular-nums text-foreground">{formatUSD(r.total_profit)}</div>
+                  <div className="col-span-3 text-right font-mono text-sm tabular-nums text-foreground">{formatMoney(r.total_profit, bangladeshMode)}</div>
                 </div>
               )
             })}
@@ -178,7 +182,7 @@ function SliderRow({ label, suffix, min, max, step, value, onChange }: { label: 
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between text-xs">
-        <span className="uppercase tracking-[0.16em] text-muted-foreground">{label}</span>
+        <span className="uppercase tracking-[0.16em] text-muted-foreground"><TermLabel label={label} /></span>
         <span className="font-mono text-foreground">
           {value > 0 ? "+" : ""}
           {value}
@@ -195,7 +199,7 @@ function NumField({ id, label, value, step, onChange, prefix }: { id: string; la
   return (
     <div className="space-y-1">
       <Label htmlFor={id} className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
-        {label}
+        <TermLabel label={label} />
       </Label>
       <div className="flex items-center rounded-md border border-border/70 bg-background px-2">
         {prefix && <span className="text-xs text-muted-foreground">{prefix}</span>}

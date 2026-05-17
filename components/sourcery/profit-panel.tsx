@@ -9,9 +9,12 @@ import { Trophy, ShieldCheck, Scale } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { rankProfit, formatUSD, type ProfitInputs, type ProfitResult } from "@/lib/profit"
+import { TermLabel } from "@/components/sourcery/term-help"
+import { rankProfit, type ProfitInputs, type ProfitResult } from "@/lib/profit"
 import type { Supplier } from "@/lib/types"
 import { cn } from "@/lib/utils"
+import { formatMoney } from "@/lib/currency"
+import { usePreferences } from "@/lib/preferences-context"
 
 type Props = {
   // Suppliers being compared.
@@ -30,9 +33,9 @@ const BADGE_META = {
 } as const
 
 // Build a one-sentence deterministic explanation for a profit result. No AI cost.
-function explainProfit(supplier: Supplier, p: ProfitResult): string {
+function explainProfit(supplier: Supplier, p: ProfitResult, bangladeshMode: boolean): string {
   const marginPct = (p.gross_margin * 100).toFixed(1)
-  if (p.gross_margin < 0) return `Selling price below landed cost — order would lose ${formatUSD(Math.abs(p.total_profit))} at ${supplier.country} unit cost.`
+  if (p.gross_margin < 0) return `Selling price below landed cost — order would lose ${formatMoney(Math.abs(p.total_profit), bangladeshMode)} at ${supplier.country} unit cost.`
   if (p.recommended_type === "max_profit") return `Highest risk-adjusted profit at ${marginPct}% margin despite a risk score of ${supplier.risk_score}/100.`
   if (p.recommended_type === "lowest_risk") return `Safest pick — risk score ${supplier.risk_score}/100, ${marginPct}% margin, ${supplier.on_time_rate}% on-time delivery.`
   if (p.recommended_type === "balanced") return `Best blend of upside and safety — ${marginPct}% margin against ${supplier.risk_score}/100 risk.`
@@ -41,6 +44,7 @@ function explainProfit(supplier: Supplier, p: ProfitResult): string {
 }
 
 export function ProfitPanel({ suppliers, inputs, onChange }: Props) {
+  const { bangladeshMode } = usePreferences()
   // Compute ranked profit results — recomputed every render but the math is trivial.
   const ranked = useMemo(() => rankProfit(suppliers, inputs), [suppliers, inputs])
   // Quick lookup by id for joining with the supplier list.
@@ -81,10 +85,10 @@ export function ProfitPanel({ suppliers, inputs, onChange }: Props) {
       <div className="mt-4 overflow-hidden rounded-lg border border-black/10 bg-white">
         <div className="grid grid-cols-12 gap-3 border-b border-black/10 bg-[#eef1ea] px-4 py-2 text-[11px] uppercase tracking-[0.16em] text-[#6d7a75]">
           <div className="col-span-4">Supplier</div>
-          <div className="col-span-2 text-right">Landed</div>
-          <div className="col-span-2 text-right">Margin</div>
-          <div className="col-span-2 text-right">Risk-adj</div>
-          <div className="col-span-2 text-right">Total profit</div>
+          <div className="col-span-2 text-right"><TermLabel label="Landed" /></div>
+          <div className="col-span-2 text-right"><TermLabel label="Margin" /></div>
+          <div className="col-span-2 text-right"><TermLabel label="Risk-adj" /></div>
+          <div className="col-span-2 text-right"><TermLabel label="Total profit" /></div>
         </div>
         {suppliers.map((s) => {
           const p = byId.get(s.id)
@@ -106,13 +110,13 @@ export function ProfitPanel({ suppliers, inputs, onChange }: Props) {
                     </Badge>
                   )}
                 </div>
-                <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{explainProfit(s, p)}</p>
+                <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{explainProfit(s, p, bangladeshMode)}</p>
               </div>
               {/* Numeric cells. */}
-              <Cell className="col-span-3 md:col-span-2">{formatUSD(p.landed_cost)}</Cell>
+              <Cell className="col-span-3 md:col-span-2">{formatMoney(p.landed_cost, bangladeshMode)}</Cell>
               <Cell className={cn("col-span-3 md:col-span-2", marginTone)}>{(p.gross_margin * 100).toFixed(1)}%</Cell>
               <Cell className="col-span-3 md:col-span-2">{(p.risk_adjusted_profit * 100).toFixed(1)}%</Cell>
-              <Cell className="col-span-3 md:col-span-2">{formatUSD(p.total_profit)}</Cell>
+              <Cell className="col-span-3 md:col-span-2">{formatMoney(p.total_profit, bangladeshMode)}</Cell>
             </div>
           )
         })}
@@ -145,7 +149,7 @@ function NumberField({
   return (
     <div className="space-y-1">
       <Label htmlFor={id} className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
-        {label}
+        <TermLabel label={label} />
       </Label>
       <div className="flex items-center rounded-md border border-border/70 bg-background px-2">
         {suffix === "$" && <span className="text-xs text-muted-foreground">$</span>}

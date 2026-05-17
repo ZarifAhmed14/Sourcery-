@@ -9,10 +9,8 @@ export type SupportedProductOption = {
 export const SUPPORTED_PRODUCT_CATALOG: SupportedProductOption[] = [
   { category: "accessories", label: "Bags & accessories", products: ["jute tote bags", "leather handbags", "backpacks", "cotton-jute export totes"] },
   { category: "apparel", label: "Apparel", products: ["cotton t-shirts", "organic cotton hoodies", "denim jeans", "activewear sets"] },
-  { category: "beauty", label: "Skincare & beauty", products: ["face serum", "lip balm", "private label cosmetics", "soap bars"] },
   { category: "food", label: "Food & beverage", products: ["tea packs", "spice blends", "rice exporters", "snack pouches", "honey jars"] },
-  { category: "home", label: "Home goods", products: ["ceramic tableware", "towels", "bedding", "rugs"] },
-  { category: "packaging", label: "Packaging", products: ["folding cartons", "paper bags", "cosmetic boxes", "jute pouches"] },
+  { category: "home", label: "Home goods", products: ["cotton blankets", "towels", "bedding", "rugs"] },
   { category: "footwear", label: "Footwear", products: ["canvas sneakers", "sports shoes", "leather sandals", "kids footwear"] },
 ]
 

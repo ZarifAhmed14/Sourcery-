@@ -506,6 +506,7 @@ export async function runSourcingOrchestrator(args: {
   }
 
   const retrieval = await retrieveCandidates(args.query, 20, detectedCategory, {
+    product: args.product,
     country: args.country,
     region: args.region,
     targetUnitPriceMin: args.targetUnitPriceMin,

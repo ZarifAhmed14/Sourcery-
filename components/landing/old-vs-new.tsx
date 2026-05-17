@@ -20,9 +20,9 @@ export function OldVsNew() {
     "One natural-language brief: '280 GSM hoodie, GOTS, MOQ 300'",
     "Verified shortlist in under a minute",
     "Side-by-side scorecards across price, lead time, quality, risk",
-    "Bargain Copilot drafts the outreach in your tone",
+    "Supplier notes, risk signals, and price context stay in one place",
     "Confidence and reasoning attached to every recommendation",
-    "Bangladesh Mode for South-Asian sourcing nuance",
+    "USD or BDT price view for local buyer presentations",
   ]
 
   // Section element with anchor target for nav.

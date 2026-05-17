@@ -102,7 +102,6 @@ export default async function HealthPage() {
             <Endpoint method="GET" path="/api/health" />
             <Endpoint method="GET" path="/api/suppliers" />
             <Endpoint method="POST" path="/api/source" />
-            <Endpoint method="POST" path="/api/bargain" />
             <Endpoint method="POST" path="/api/simulate" />
           </div>
         </div>

@@ -21,7 +21,7 @@ export async function POST(req: Request) {
     const input = parseJson(SourceRequestSchema, await readJson(req))
     const result = await runSourcingOrchestrator({
       query: input.query,
-      bangladeshMode: input.bangladeshMode ?? false,
+      bangladeshMode: false,
       topK: input.topK ?? 10,
       category: input.category,
       product: input.product,

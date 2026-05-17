@@ -13,6 +13,7 @@ export type RetrievalResult = {
 }
 
 type BuyerFilters = {
+  product?: string | null
   country?: string | null
   region?: Supplier["region"] | null
   targetUnitPriceMin?: number | null
@@ -59,8 +60,18 @@ function tokenize(query: string): string[] {
 
 function uniqueSuppliers(suppliers: Supplier[]): Supplier[] {
   const byId = new Map<string, Supplier>()
+  const byName = new Set<string>()
   for (const supplier of suppliers) {
-    if (!byId.has(supplier.id)) byId.set(supplier.id, supplier)
+    const nameKey = supplier.name
+      .toLowerCase()
+      .replace(/\s+\d{1,4}$/g, "")
+      .replace(/\b(works|co\.?|company|ltd\.?|limited|group|collective)\b/g, "")
+      .replace(/[^a-z0-9]+/g, " ")
+      .trim()
+
+    if (byId.has(supplier.id) || byName.has(nameKey)) continue
+    byId.set(supplier.id, supplier)
+    if (nameKey) byName.add(nameKey)
   }
   return [...byId.values()]
 }
@@ -91,6 +102,12 @@ function applyBuyerFilters(suppliers: Supplier[], filters: BuyerFilters): Suppli
   })
 }
 
+function productMatches(supplier: Supplier, product?: string | null): boolean {
+  const normalized = product?.trim().toLowerCase()
+  if (!normalized) return false
+  return supplierSearchHaystack(supplier).includes(normalized)
+}
+
 function hasDirectQueryMatch(supplier: Supplier, query: string, category: SupplierCategory | null): boolean {
   const tokens = tokenize(query)
   const haystack = supplierSearchHaystack(supplier)
@@ -118,8 +135,9 @@ function relevanceScore(supplier: Supplier, query: string, category: SupplierCat
   const bdScore = bdIntent && supplier.country === "Bangladesh" ? 22 : 0
   const juteScore = /\bjute\b/i.test(query) && haystack.includes("jute") ? 34 : 0
   const bagScore = /\b(bag|bags|tote|totes)\b/i.test(query) && /\b(bag|bags|tote|totes)\b/.test(haystack) ? 18 : 0
+  const productScore = productMatches(supplier, filters.product) ? 80 : 0
 
-  return tokenScore + vectorScore + categoryScore + qualityScore + riskScore + leadScore + moqScore + orderQtyScore + bdScore + juteScore + bagScore
+  return tokenScore + vectorScore + categoryScore + productScore + qualityScore + riskScore + leadScore + moqScore + orderQtyScore + bdScore + juteScore + bagScore
 }
 
 function rankSuppliersForQuery(
@@ -131,8 +149,10 @@ function rankSuppliersForQuery(
 ): Supplier[] {
   const unique = uniqueSuppliers(suppliers)
   const filteredUnique = applyBuyerFilters(unique, filters)
+  const productMatched = filteredUnique.filter((supplier) => productMatches(supplier, filters.product))
   const directlyMatched = filteredUnique.filter((supplier) => hasDirectQueryMatch(supplier, query, category))
-  const pool = directlyMatched.length > 0 ? directlyMatched : filterByCategoryWithFallback(filteredUnique, category)
+  const primaryPool = productMatched.length >= Math.min(topK, 4) ? productMatched : directlyMatched
+  const pool = primaryPool.length > 0 ? primaryPool : filterByCategoryWithFallback(filteredUnique, category)
 
   return pool
     .map((supplier) => ({ supplier, score: relevanceScore(supplier, query, category, filters) }))

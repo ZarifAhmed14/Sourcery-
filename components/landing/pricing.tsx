@@ -35,7 +35,7 @@ export function Pricing() {
       features: [
         "Unlimited sourcing runs",
         "Up to 50 suppliers per shortlist",
-        "Bargain Copilot · Bangladesh Mode",
+        "USD and BDT price views",
         "What-if simulation engine",
         "Profit Intelligence Engine",
       ],

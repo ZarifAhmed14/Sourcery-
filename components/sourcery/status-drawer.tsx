@@ -92,7 +92,7 @@ export function StatusDrawer() {
           <div className="rounded-2xl border border-black/10 bg-white p-5">
             <h3 className="text-lg font-semibold text-[#16201d]">Show the workspace, not the plumbing</h3>
             <p className="mt-2 text-sm leading-6 text-[#5d6965]">
-              The workspace map is part of the product story. Keep it one click away from sourcing so judges can see the Discovery, Risk, Bargain, and Simulation stack clearly.
+              The workspace map is part of the product story. Keep it one click away from sourcing so judges can see the Discovery, Risk, and Simulation stack clearly.
             </p>
             <div className="mt-4 flex flex-wrap gap-2">
               <Button asChild className="rounded-full bg-[#16201d] text-[#f7f4ec] hover:bg-[#22312d]">

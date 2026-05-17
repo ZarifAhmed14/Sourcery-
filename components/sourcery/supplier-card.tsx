@@ -7,7 +7,7 @@ import type { Supplier } from "@/lib/types"
 import type { DiscoveryItem, RiskItem, ComparisonItem } from "@/lib/schemas"
 import { WhyAccordion } from "@/components/sourcery/why-accordion"
 import { Badge } from "@/components/ui/badge"
-import { formatUSD } from "@/lib/profit"
+import { formatMoney } from "@/lib/currency"
 import { cn } from "@/lib/utils"
 
 type Props = {
@@ -45,19 +45,18 @@ export function SupplierCard({ supplier, discovery, risk, comparison, bangladesh
             {supplier.city}, {supplier.country} · {supplier.subcategory}
           </p>
         </div>
-        {/* Right-side badges — BGMEA, fit score, BD-adjusted risk note. */}
+        {/* Right-side badges — BGMEA and fit score. */}
         <div className="flex flex-wrap items-center gap-2">
           {supplier.bgmea_certified && bangladeshMode && (
             <Badge className="bg-[#006a4e] text-white hover:bg-[#006a4e]">BGMEA</Badge>
           )}
-          {risk.bd_mode_adjusted && <Badge variant="outline">BD-adj risk −20%</Badge>}
           <Badge variant="secondary">Fit {Math.round(discovery.fit_score)}</Badge>
         </div>
       </header>
 
       {/* Scorecard grid — five numeric KPIs in a row, with optional Bangla labels. */}
       <div className="grid grid-cols-2 gap-px bg-border md:grid-cols-5">
-        <ScoreCell value={formatUSD(comparison.scorecard.price)} en="Unit Price" bn="একক মূল্য" on={bangladeshMode} />
+        <ScoreCell value={formatMoney(comparison.scorecard.price, bangladeshMode)} en="Unit Price" bn="একক মূল্য" on={bangladeshMode} />
         <ScoreCell value={`${comparison.scorecard.lead_time_days}d`} en="Lead Time" bn="সরবরাহ সময়" on={bangladeshMode} />
         <ScoreCell value={comparison.scorecard.moq.toLocaleString()} en="MOQ" bn="ন্যূনতম অর্ডার" on={bangladeshMode} />
         <ScoreCell value={`${comparison.scorecard.on_time_rate}%`} en="On-time" bn="সময়মতো" on={bangladeshMode} />

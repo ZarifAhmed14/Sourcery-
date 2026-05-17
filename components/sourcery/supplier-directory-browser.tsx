@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button"
 import { readShortlistIds, saveShortlistIds } from "@/lib/sourcing-result-store"
 import type { Supplier, SupplierCategory } from "@/lib/types"
 import { cn } from "@/lib/utils"
+import { formatMoney } from "@/lib/currency"
+import { usePreferences } from "@/lib/preferences-context"
 
 type SupplierListResponse = {
   suppliers: Supplier[]
@@ -16,10 +18,8 @@ const CATEGORY_OPTIONS: Array<{ value: SupplierCategory | "all"; label: string }
   { value: "all", label: "All categories" },
   { value: "accessories", label: "Accessories" },
   { value: "apparel", label: "Apparel" },
-  { value: "beauty", label: "Beauty" },
   { value: "food", label: "Food" },
   { value: "home", label: "Home" },
-  { value: "packaging", label: "Packaging" },
   { value: "footwear", label: "Footwear" },
 ]
 
@@ -29,6 +29,7 @@ export function SupplierDirectoryBrowser() {
   const [category, setCategory] = useState<SupplierCategory | "all">("all")
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [shortlist, setShortlist] = useState<string[]>([])
+  const { bangladeshMode } = usePreferences()
 
   useEffect(() => {
     setShortlist(readShortlistIds())
@@ -154,7 +155,7 @@ export function SupplierDirectoryBrowser() {
               <ProfileItem label="Category" value={selected.category} />
               <ProfileItem label="Products" value={selected.products?.join(", ") || selected.subcategory} />
               <ProfileItem label="Certifications" value={selected.certifications.join(", ") || "Not listed"} />
-              <ProfileItem label="Operational metrics" value={`${selected.moq} MOQ • ${selected.lead_time_days}d lead • ${selected.unit_price_usd} USD`} />
+              <ProfileItem label="Operational metrics" value={`${selected.moq} MOQ • ${selected.lead_time_days}d lead • ${formatMoney(selected.unit_price_usd, bangladeshMode)}`} />
             </div>
 
             <p className="mt-5 text-sm leading-6 text-[#4e5a55]">{selected.description}</p>

@@ -23,10 +23,10 @@ const workflow = [
 ]
 
 const proofItems = [
-  ["Find suppliers", "Turn a messy buying brief into ranked supplier candidates."],
-  ["Read the risk", "See risk score, flags, certifications, and why each supplier was picked."],
-  ["Model margin", "Estimate landed cost, selling price, fees, and profit before outreach."],
-  ["Negotiate faster", "Generate supplier-ready bargaining messages from the selected supplier context."],
+  ["Supplier matching", "Match product, country, price, quantity, lead time, and certification needs in one sourcing run."],
+  ["Risk-aware ranking", "Compare suppliers using risk score, quality rating, lead time, and compliance signals."],
+  ["Margin planning", "Estimate landed cost, selling price, fees, and expected profit before choosing a supplier."],
+  ["Decision support", "Shortlist suppliers, compare trade-offs, and move forward with the strongest sourcing path."],
 ]
 
 export default function HomePage() {
@@ -45,8 +45,8 @@ export default function HomePage() {
           </Link>
           <nav className="hidden items-center justify-self-center gap-7 text-sm text-[#53605c] md:flex">
             <Link href="/app" className="hover:text-[#16201d]">Workspace</Link>
-            <a href="#suppliers" className="hover:text-[#16201d]">Suppliers</a>
             <Link href="/app/workflow" className="hover:text-[#16201d]">How it works</Link>
+            <Link href="/app/directory" className="hover:text-[#16201d]">Suppliers</Link>
           </nav>
           <div className="justify-self-end">
             <Button asChild variant="outline" className="hidden h-10 rounded-md border-black/10 bg-white/70 px-4 text-[#16201d] hover:bg-white md:inline-flex">
@@ -87,7 +87,7 @@ export default function HomePage() {
                     <Radar className="h-5 w-5 text-[#d9b44a]" />
                     <span className="text-sm font-semibold">Sourcing Run</span>
                   </div>
-                  <span className="rounded-md border border-[#d9b44a]/30 bg-[#2d2414] px-2 py-1 text-xs font-medium text-[#f0d58d]">Bangladesh Mode</span>
+                  <span className="rounded-md border border-[#d9b44a]/30 bg-[#2d2414] px-2 py-1 text-xs font-medium text-[#f0d58d]">BDT view</span>
                 </div>
                 <div className="grid min-w-0 border-b border-white/10 md:grid-cols-[0.78fr_1.22fr]">
                   <div className="min-w-0 space-y-4 border-r border-white/10 p-5">
@@ -143,58 +143,13 @@ export default function HomePage() {
           </div>
         </section>
 
-        <section id="suppliers" className="border-b border-black/10 bg-[#fffaf0] py-24">
-          <div className="mx-auto max-w-7xl px-5 md:px-8">
-            <div className="max-w-3xl">
-              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#7a5b0f]">Suppliers</p>
-              <h2 className="mt-4 font-serif text-5xl leading-none md:text-7xl">Browse the supplier base before you run a sourcing brief.</h2>
-              <p className="mt-4 max-w-2xl text-lg leading-8 text-[#5e6a66]">
-                Judges can see the kind of supplier data Sourcery works with: category, location, fit, risk, price, and lead-time context before the AI ranking layer takes over.
-              </p>
-            </div>
-            <div className="mt-12 grid gap-6 lg:grid-cols-[1.15fr_0.85fr]">
-              <div className="overflow-hidden rounded-3xl border border-black/10 bg-white shadow-sm">
-                <div className="grid grid-cols-[1.4fr_0.8fr_0.6fr_0.55fr_0.55fr] gap-3 bg-[#eef1ea] px-5 py-4 text-xs font-semibold uppercase tracking-[0.16em] text-[#6d7a75]">
-                  <span>Supplier</span>
-                  <span>Location</span>
-                  <span>Unit</span>
-                  <span>Lead</span>
-                  <span>Risk</span>
-                </div>
-                {supplierRows.map((row) => (
-                  <div key={row.name} className="grid grid-cols-[1.4fr_0.8fr_0.6fr_0.55fr_0.55fr] gap-3 border-t border-black/10 px-5 py-4 text-sm">
-                    <div>
-                      <div className="font-semibold text-[#16201d]">{row.name}</div>
-                      <div className="mt-1 text-xs text-[#6d7a75]">Fit {row.fit}%</div>
-                    </div>
-                    <span className="text-[#53605c]">{row.place}</span>
-                    <span className="font-medium text-[#16201d]">{row.price}</span>
-                    <span className="text-[#53605c]">{row.lead}</span>
-                    <span className="text-[#53605c]">{row.risk}</span>
-                  </div>
-                ))}
-              </div>
-
-              <div className="rounded-3xl border border-black/10 bg-white p-8 shadow-sm">
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#7a5b0f]">Inside each supplier profile</p>
-                <div className="mt-6 space-y-4">
-                  <SupplierLandingItem label="Products supported" value="Jute totes, knitwear, cartons, beauty packaging, and more" />
-                  <SupplierLandingItem label="Operational detail" value="Unit price, MOQ, lead time, and country/region context" />
-                  <SupplierLandingItem label="Trust signals" value="Risk score, certifications, BGMEA badge, and sourcing notes" />
-                  <SupplierLandingItem label="Decision path" value="Shortlist, compare, profit model, and bargain draft generation" />
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-
         <section className="bg-[#16201d] py-24 text-[#f7f4ec]">
           <div className="mx-auto max-w-7xl px-5 md:px-8">
             <div>
-              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#d9b44a]">Product proof</p>
-              <h2 className="mt-4 font-serif text-5xl leading-none md:text-7xl">Not a pretty shell. A real sourcing system.</h2>
+              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#d9b44a]">Why Sourcery works</p>
+              <h2 className="mt-4 font-serif text-5xl leading-none md:text-7xl">Sourcing decisions need more than a supplier list.</h2>
               <p className="mt-6 text-lg leading-8 text-[#bac5c0]">
-                Judges can see the data, the ranking logic, the fallback behavior, the risk layer, and the actual supplier workspace in one flow.
+                Sourcery combines supplier data, ranking logic, risk context, and profit modeling so buyers can compare options before they commit time or money.
               </p>
             </div>
             <div className="mt-12 grid gap-4 md:grid-cols-4">
@@ -205,47 +160,23 @@ export default function HomePage() {
                 </div>
               ))}
             </div>
-            <div className="mt-8">
-              <Button asChild variant="outline" className="h-12 rounded-md border-white/15 bg-white/[0.04] px-6 text-[#f7f4ec] hover:bg-white/[0.08]">
-                <Link href="/app/workflow">
-                  Open how it works
-                  <ArrowRight className="ml-2 h-4 w-4" />
-                </Link>
-              </Button>
-            </div>
           </div>
         </section>
 
-        <section className="border-b border-black/10 bg-[#f7f4ec] py-24">
-          <div className="mx-auto max-w-7xl px-5 md:px-8">
-            <div className="rounded-lg border border-dashed border-black/15 bg-white/55 p-10 text-center">
-              <h2 className="font-serif text-4xl">More homepage sections can go here next.</h2>
-              <p className="mt-4 text-lg text-[#5e6a66]">
-                We removed the extra system blocks for now to keep the homepage easier to understand.
-              </p>
-              <div className="mt-8 flex justify-center">
-                <Button asChild size="lg" className="h-12 rounded-md bg-[#16201d] px-6 text-[#f7f4ec] hover:bg-[#24332f]">
-                  <Link href="/app">
-                    Open Sourcery
-                    <ArrowRight className="ml-2 h-4 w-4" />
-                  </Link>
-                </Button>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section className="bg-[#d9b44a] py-20 text-[#16201d]">
+        <section className="bg-[#f7f4ec] py-20 text-[#16201d]">
           <div className="mx-auto flex max-w-7xl flex-col items-start justify-between gap-8 px-5 md:flex-row md:items-center md:px-8">
             <div>
-              <p className="text-sm font-semibold uppercase tracking-[0.18em]">Live demo ready</p>
+              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#7a5b0f]">Supplier intelligence workspace</p>
               <h2 className="mt-3 max-w-3xl font-serif text-5xl leading-none md:text-7xl">
-                Walk the judge from wow to working product.
+                Turn supplier search into a clear buying decision.
               </h2>
+              <p className="mt-5 max-w-2xl text-lg leading-8 text-[#5e6a66]">
+                Sourcery helps small teams compare sourcing options by price, quantity, lead time, certification, risk, and expected profit before they contact a supplier.
+              </p>
             </div>
             <Button asChild size="lg" className="h-12 rounded-md bg-[#16201d] px-6 text-[#f7f4ec] hover:bg-[#24332f]">
               <Link href="/app">
-                Open Sourcery
+                Start sourcing
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Link>
             </Button>
@@ -274,15 +205,6 @@ function MiniKpi({ label, value }: { label: string; value: string }) {
     <div>
       <div className="text-[10px] uppercase tracking-[0.14em] text-[#85928d]">{label}</div>
       <div className="mt-1 font-semibold text-[#f5efe0]">{value}</div>
-    </div>
-  )
-}
-
-function SupplierLandingItem({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-2xl border border-black/10 bg-[#f7f4ec] p-4">
-      <div className="text-xs font-semibold uppercase tracking-[0.16em] text-[#6d7a75]">{label}</div>
-      <div className="mt-2 text-sm leading-6 text-[#16201d]">{value}</div>
     </div>
   )
 }

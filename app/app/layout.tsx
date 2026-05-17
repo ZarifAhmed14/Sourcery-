@@ -14,7 +14,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
       <PreferencesProvider>
         <div className="min-h-screen overflow-x-hidden bg-[#f7f4ec] text-[#16201d]">
           <AppNav user={null} />
-          <main className="mx-auto w-full max-w-[1680px] px-8 pb-24 pt-8 md:px-10 xl:px-14">{children}</main>
+          <main className="w-full px-4 pb-6 pt-6 md:px-6 xl:px-8">{children}</main>
         </div>
       </PreferencesProvider>
     )
@@ -35,7 +35,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
     <PreferencesProvider>
       <div className="min-h-screen overflow-x-hidden bg-[#f7f4ec] text-[#16201d]">
         <AppNav user={userInfo} />
-        <main className="mx-auto w-full max-w-[1680px] px-8 pb-24 pt-8 md:px-10 xl:px-14">{children}</main>
+        <main className="w-full px-4 pb-6 pt-6 md:px-6 xl:px-8">{children}</main>
       </div>
     </PreferencesProvider>
   )
