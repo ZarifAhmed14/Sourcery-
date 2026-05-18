@@ -2,7 +2,6 @@ import Link from "next/link"
 import type { ComponentType, ReactNode } from "react"
 import { notFound } from "next/navigation"
 import {
-  ArrowLeft,
   ArrowRight,
   BadgeCheck,
   BarChart3,
@@ -106,10 +105,14 @@ export default async function SupplierDetailPage({ params }: { params: Promise<{
 
   return (
     <div className="space-y-6">
-      <Link href="/app" className="inline-flex items-center gap-2 text-sm font-medium text-[#5d6965] hover:text-[#16201d]">
-        <ArrowLeft className="h-4 w-4" />
-        Back to workspace
-      </Link>
+      <div className="flex justify-end">
+        <Button asChild className="rounded-md bg-[#16201d] text-[#f7f4ec] hover:bg-[#22312d]">
+          <Link href={`/app/compare?supplier=${supplier.id}`}>
+            Profit & simulation
+            <BarChart3 className="ml-1.5 h-4 w-4" />
+          </Link>
+        </Button>
+      </div>
 
       <section className="overflow-hidden rounded-lg border border-black/10 bg-[#16201d] text-[#f7f4ec] shadow-sm">
         <div className="grid lg:grid-cols-[0.82fr_1.18fr]">
@@ -236,6 +239,12 @@ export default async function SupplierDetailPage({ params }: { params: Promise<{
             <Link href={`/app/decision/${supplier.id}`}>
               Open supplier decision
               <ArrowRight className="ml-1.5 h-4 w-4" />
+            </Link>
+          </Button>
+          <Button asChild variant="outline" className="rounded-md border-black/10 bg-transparent text-[#16201d] hover:bg-[#f1ede3]">
+            <Link href={`/app/compare?supplier=${supplier.id}`}>
+              Profit & simulation
+              <BarChart3 className="ml-1.5 h-4 w-4" />
             </Link>
           </Button>
           <Button asChild variant="outline" className="rounded-md border-black/10 bg-transparent text-[#16201d] hover:bg-[#f1ede3]">

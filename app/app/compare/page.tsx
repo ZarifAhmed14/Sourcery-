@@ -3,43 +3,79 @@
 import Link from "next/link"
 import type { ComponentType } from "react"
 import { useEffect, useMemo, useState } from "react"
+import { useSearchParams } from "next/navigation"
 import { ArrowLeft, GitCompare, LineChart, ShieldCheck, Sparkles, TrendingUp } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { ProfitPanel } from "@/components/sourcery/profit-panel"
 import { SimulationPanel } from "@/components/sourcery/simulation-panel"
 import { TermLabel } from "@/components/sourcery/term-help"
-import { loadLatestResult, readShortlistIds } from "@/lib/sourcing-result-store"
+import { loadLatestResult, readCompareSupplierIds, readShortlistIds } from "@/lib/sourcing-result-store"
 import { DEFAULT_PROFIT_INPUTS, type ProfitInputs } from "@/lib/profit"
 import type { SourcingResult } from "@/lib/sourcery/orchestrator"
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
 import { formatMoney } from "@/lib/currency"
 import { usePreferences } from "@/lib/preferences-context"
 import { getProductImage } from "@/lib/product-images"
+import type { Supplier } from "@/lib/types"
+import { BackNavButton } from "@/components/sourcery/back-nav-button"
 
 export default function ComparePage() {
+  const searchParams = useSearchParams()
+  const supplierId = searchParams.get("supplier")
   const [result, setResult] = useState<SourcingResult | null>(null)
   const [profitInputs, setProfitInputs] = useState<ProfitInputs>(DEFAULT_PROFIT_INPUTS)
   const [shortlistIds, setShortlistIds] = useState<string[]>([])
+  const [singleSupplier, setSingleSupplier] = useState<Supplier | null>(null)
+  const [compareIds, setCompareIds] = useState<string[]>([])
   const { bangladeshMode } = usePreferences()
 
   useEffect(() => {
     setResult(loadLatestResult())
     setShortlistIds(readShortlistIds())
+    setCompareIds(readCompareSupplierIds())
   }, [])
 
+  useEffect(() => {
+    let active = true
+    if (!supplierId) {
+      setSingleSupplier(null)
+      return () => {
+        active = false
+      }
+    }
+
+    void fetch(`/api/suppliers/${supplierId}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!active) return
+        setSingleSupplier((data?.supplier as Supplier | undefined) ?? null)
+      })
+      .catch(() => {
+        if (active) setSingleSupplier(null)
+      })
+
+    return () => {
+      active = false
+    }
+  }, [supplierId])
+
   const top5 = useMemo(() => {
+    if (singleSupplier) return [singleSupplier]
     if (!result) return []
     const selected = new Set(shortlistIds)
+    const compareSelected = new Set(compareIds)
     const ranked = result.discovery
       .slice()
       .sort((a, b) => a.rank - b.rank)
       .map((d) => result.suppliers.find((s) => s.id === d.supplier_id)!)
       .filter(Boolean)
     const shortlisted = ranked.filter((supplier) => selected.has(supplier.id))
-    return (shortlisted.length > 0 ? shortlisted : ranked).slice(0, 5)
-  }, [result, shortlistIds])
+    const compareVisible = ranked.filter((supplier) => compareSelected.has(supplier.id))
+    const source = shortlisted.length > 0 ? shortlisted : compareVisible.length > 0 ? compareVisible : ranked
+    return source.slice(0, 5)
+  }, [compareIds, result, shortlistIds, singleSupplier])
 
-  if (!result || top5.length === 0) {
+  if ((!result && !singleSupplier) || top5.length === 0) {
     return (
       <Empty className="rounded-lg border border-black/10 bg-white py-16 shadow-sm">
         <EmptyHeader>
@@ -63,15 +99,24 @@ export default function ComparePage() {
   const lowestUnit = top5.reduce((candidate, supplier) => (supplier.unit_price_usd < candidate.unit_price_usd ? supplier : candidate), best)
   const productName = best.products?.[0] ?? best.subcategory
   const productImage = getProductImage({ supplier: best, product: productName })
+  const compareQuery = result?.meta.query ?? `Focused review for ${best.name}`
+  const singleMode = top5.length === 1
+  const backTarget = supplierId ? `/app/suppliers/${supplierId}` : "/app"
 
   return (
     <div className="space-y-6">
+      <div className="flex justify-start">
+        <BackNavButton fallbackHref={backTarget} label={supplierId ? "Back to supplier profile" : "Back to workspace"} />
+      </div>
+
       <section className="rounded-2xl border border-black/10 bg-white/78 p-7 text-[#16201d] shadow-sm md:p-8">
         <div className="flex flex-wrap items-start justify-between gap-6">
           <div className="max-w-3xl">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#7a5b0f]">Decision desk</p>
-            <h1 className="mt-3 text-5xl font-semibold leading-none tracking-tight md:text-6xl">Compare the shortlist.</h1>
-            <p className="mt-4 text-sm leading-6 text-[#5d6965]">Query: {result.meta.query}</p>
+            <h1 className="mt-3 text-5xl font-semibold leading-none tracking-tight md:text-6xl">
+              {singleMode ? "Profit and simulation review." : "Compare the shortlist."}
+            </h1>
+            <p className="mt-4 text-sm leading-6 text-[#5d6965]">Query: {compareQuery}</p>
           </div>
           <div className="min-w-[260px] overflow-hidden rounded-xl border border-black/10 bg-[#16201d] text-[#f7f4ec] shadow-sm">
             <div className="h-36 overflow-hidden bg-[#ece7dc]">
@@ -85,7 +130,7 @@ export default function ComparePage() {
           </div>
         </div>
         <div className="mt-7 grid gap-3 md:grid-cols-4">
-          <ProofPill icon={GitCompare} label={`${top5.length} suppliers`} detail="top-ranked candidates" />
+          <ProofPill icon={GitCompare} label={`${top5.length} supplier${top5.length > 1 ? "s" : ""}`} detail={singleMode ? "focused review" : "top-ranked candidates"} />
           <ProofPill icon={ShieldCheck} label="Risk checked" detail="score, lead, certification" />
           <ProofPill icon={LineChart} label="Profit ready" detail="margin and landed cost" />
           <ProofPill icon={LineChart} label="Simulation" detail="profit stress test" />
@@ -98,9 +143,13 @@ export default function ComparePage() {
             <Sparkles className="mt-1 h-5 w-5 text-[#d9b44a]" />
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#7a5b0f]">Recommendation summary</p>
-              <h2 className="mt-2 text-2xl font-semibold text-[#16201d]">{best.name} is the current front-runner.</h2>
+              <h2 className="mt-2 text-2xl font-semibold text-[#16201d]">
+                {singleMode ? `${best.name} under decision review.` : `${best.name} is the current front-runner.`}
+              </h2>
               <p className="mt-2 text-sm leading-6 text-[#5d6965]">
-                {lowestRisk.name} carries the lowest risk, while {lowestUnit.name} has the lowest unit price. Use the profit panel below to decide whether margin or operational reliability matters more for this order.
+                {singleMode
+                  ? "Use the profit panel and simulation below to see whether this supplier still works after shipping, customs, and pricing assumptions are added."
+                  : `${lowestRisk.name} carries the lowest risk, while ${lowestUnit.name} has the lowest unit price. Use the profit panel below to decide whether margin or operational reliability matters more for this order.`}
               </p>
             </div>
           </div>

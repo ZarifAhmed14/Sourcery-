@@ -9,6 +9,8 @@ import type { SupplierCategory } from "@/lib/types"
 const LATEST_KEY = "sourcery.latest_result.v1"
 const RECENT_KEY = "sourcery.recent_queries.v1"
 const SHORTLIST_KEY = "sourcery.shortlist_ids.v1"
+const WORKSPACE_KEY = "sourcery.workspace_state.v1"
+const COMPARE_IDS_KEY = "sourcery.compare_ids.v1"
 
 // Stable summary shape used for the recent searches list.
 export type RecentQuery = {
@@ -23,6 +25,20 @@ export type RecentQuery = {
   category?: SupplierCategory
   product?: string
   confidence?: "high" | "medium" | "low"
+}
+
+export type WorkspaceState = {
+  query: string
+  hasSearched: boolean
+  selectedCategory?: string
+  selectedProduct?: string
+  selectedCountry: string
+  selectedRegion: string
+  priceBand: string
+  orderQuantity: string
+  selectedVariant?: string | null
+  selectedSize?: string | null
+  selectedId?: string | null
 }
 
 // Persist the latest sourcing result so /app/compare can pick it up without re-fetching.
@@ -91,6 +107,46 @@ export function readShortlistIds(): string[] {
     return raw ? (JSON.parse(raw) as string[]) : []
   } catch (err) {
     console.log("[v0] readShortlistIds error:", (err as Error).message)
+    return []
+  }
+}
+
+export function saveWorkspaceState(state: WorkspaceState): void {
+  try {
+    if (typeof window === "undefined") return
+    window.localStorage.setItem(WORKSPACE_KEY, JSON.stringify(state))
+  } catch (err) {
+    console.log("[v0] saveWorkspaceState error:", (err as Error).message)
+  }
+}
+
+export function readWorkspaceState(): WorkspaceState | null {
+  try {
+    if (typeof window === "undefined") return null
+    const raw = window.localStorage.getItem(WORKSPACE_KEY)
+    return raw ? (JSON.parse(raw) as WorkspaceState) : null
+  } catch (err) {
+    console.log("[v0] readWorkspaceState error:", (err as Error).message)
+    return null
+  }
+}
+
+export function saveCompareSupplierIds(ids: string[]): void {
+  try {
+    if (typeof window === "undefined") return
+    window.localStorage.setItem(COMPARE_IDS_KEY, JSON.stringify(ids))
+  } catch (err) {
+    console.log("[v0] saveCompareSupplierIds error:", (err as Error).message)
+  }
+}
+
+export function readCompareSupplierIds(): string[] {
+  try {
+    if (typeof window === "undefined") return []
+    const raw = window.localStorage.getItem(COMPARE_IDS_KEY)
+    return raw ? (JSON.parse(raw) as string[]) : []
+  } catch (err) {
+    console.log("[v0] readCompareSupplierIds error:", (err as Error).message)
     return []
   }
 }

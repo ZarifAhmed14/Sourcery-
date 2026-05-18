@@ -21,7 +21,15 @@ import { Textarea } from "@/components/ui/textarea"
 import { TermHelp, TermLabel } from "@/components/sourcery/term-help"
 import { cn } from "@/lib/utils"
 import { usePreferences } from "@/lib/preferences-context"
-import { saveLatestResult, pushRecentQuery, readShortlistIds, saveShortlistIds } from "@/lib/sourcing-result-store"
+import {
+  saveLatestResult,
+  pushRecentQuery,
+  readShortlistIds,
+  saveShortlistIds,
+  readWorkspaceState,
+  saveWorkspaceState,
+  saveCompareSupplierIds,
+} from "@/lib/sourcing-result-store"
 import { saveSearchAction } from "@/lib/sourcery/actions"
 import { SUPPORTED_PRODUCT_CATALOG } from "@/lib/sourcery/supported-products"
 import { getProductPriceBands, getProductVisualConfig, productDisplayName, type ProductPriceBand, type ProductVariant, type ProductVisualConfig } from "@/lib/sourcery/product-variants"
@@ -172,10 +180,35 @@ export function SourcingChat() {
   const [orderQuantity, setOrderQuantity] = useState("")
   const [selectedVariant, setSelectedVariant] = useState<string | null>(null)
   const [selectedSize, setSelectedSize] = useState<string | null>(null)
+  const [hasRestoredState, setHasRestoredState] = useState(false)
 
   useEffect(() => {
+    const savedState = readWorkspaceState()
+    if (savedState) {
+      setQuery(savedState.query ?? "")
+      setHasSearched(Boolean(savedState.hasSearched))
+      setSelectedCategory(savedState.selectedCategory as SupplierCategory | undefined)
+      setSelectedProduct(savedState.selectedProduct)
+      setSelectedCountry(savedState.selectedCountry ?? "Any country")
+      setSelectedRegion((savedState.selectedRegion as "Any region" | SupplierRegion) ?? "Any region")
+      setPriceBand((savedState.priceBand as PriceBandValue) ?? "standard")
+      setOrderQuantity(savedState.orderQuantity ?? "")
+      setSelectedVariant(savedState.selectedVariant ?? null)
+      setSelectedSize(savedState.selectedSize ?? null)
+      setSelectedId(savedState.selectedId ?? null)
+    }
+
+    const latest = typeof window !== "undefined" ? window.localStorage.getItem("sourcery.latest_result.v1") : null
+    if (latest) {
+      try {
+        setResult(JSON.parse(latest) as SourcingResult)
+      } catch {}
+    }
+
     const prefill = new URLSearchParams(window.location.search).get("prefill")
     if (prefill) setQuery(prefill)
+
+    setHasRestoredState(true)
   }, [])
 
   useEffect(() => {
@@ -279,6 +312,42 @@ export function SourcingChat() {
     const visibleIds = new Set(filteredPool.map((supplier) => supplier.id))
     return ranked.filter((item) => visibleIds.has(item.supplier.id)).slice(0, 4)
   }, [filteredPool, ranked])
+
+  useEffect(() => {
+    if (!hasRestoredState) return
+    saveWorkspaceState({
+      query,
+      hasSearched,
+      selectedCategory,
+      selectedProduct,
+      selectedCountry,
+      selectedRegion,
+      priceBand,
+      orderQuantity,
+      selectedVariant,
+      selectedSize,
+      selectedId,
+    })
+  }, [
+    hasRestoredState,
+    hasSearched,
+    orderQuantity,
+    priceBand,
+    query,
+    selectedCategory,
+    selectedCountry,
+    selectedId,
+    selectedProduct,
+    selectedRegion,
+    selectedSize,
+    selectedVariant,
+  ])
+
+  useEffect(() => {
+    if (!hasRestoredState) return
+    if (!hasSearched) return
+    saveCompareSupplierIds(visibleRanked.map((item) => item.supplier.id))
+  }, [hasRestoredState, hasSearched, visibleRanked])
 
   const previewSuppliers = useMemo(() => {
     if (result) return []
@@ -401,6 +470,23 @@ export function SourcingChat() {
     })
   }
 
+  const persistWorkspaceSnapshot = (nextSelectedId?: string | null) => {
+    saveWorkspaceState({
+      query,
+      hasSearched,
+      selectedCategory,
+      selectedProduct,
+      selectedCountry,
+      selectedRegion,
+      priceBand,
+      orderQuantity,
+      selectedVariant,
+      selectedSize,
+      selectedId: nextSelectedId ?? selectedId,
+    })
+    saveCompareSupplierIds(visibleRanked.map((item) => item.supplier.id))
+  }
+
   const filterPanel = (
     <div className="grid gap-3">
       <FilterBlock label="Category">
@@ -513,7 +599,7 @@ export function SourcingChat() {
   return (
     <div className="space-y-4">
       {!hasSearched ? (
-        <section className="grid gap-4 xl:grid-cols-[minmax(420px,0.95fr)_minmax(460px,0.85fr)]">
+        <section className="grid gap-4 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,0.85fr)]">
           <section className="rounded-2xl border border-black/10 bg-white/78 p-5 shadow-sm backdrop-blur-sm md:p-6">
             <form onSubmit={onSubmit} className="space-y-4">
               {filterPanel}
@@ -558,7 +644,7 @@ export function SourcingChat() {
                 onSelectSize={setSelectedSize}
               />
             ) : (
-              <div className="flex h-full min-h-[520px] flex-col justify-between bg-[#fffdf7] p-8 text-[#16201d]">
+              <div className="flex h-full min-h-[360px] flex-col justify-between bg-[#fffdf7] p-6 text-[#16201d] lg:min-h-[520px] lg:p-8">
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#7a5b0f]">Product overview</p>
                   <h2 className="mt-4 max-w-md font-serif text-5xl leading-none text-[#16201d]">Choose what you want to source.</h2>
@@ -569,7 +655,7 @@ export function SourcingChat() {
           </div>
         </section>
       ) : (
-      <section className="grid gap-4 xl:grid-cols-[minmax(520px,0.78fr)_minmax(420px,1fr)]">
+      <section className="grid gap-4 lg:grid-cols-[minmax(0,0.78fr)_minmax(0,1fr)]">
         <section className="space-y-4 rounded-2xl border border-black/10 bg-white/78 p-4 shadow-sm backdrop-blur-sm md:p-5">
           {filterPanel}
 
@@ -619,7 +705,7 @@ export function SourcingChat() {
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="rounded-md bg-[#d9b44a] px-2.5 py-1 text-xs font-semibold text-[#16201d]">#{item.discovery.rank}</span>
+                      <span className="rounded-md bg-[#d9b44a] px-2.5 py-1 text-xs font-semibold text-[#16201d]">#{visibleRanked.findIndex((entry) => entry.supplier.id === item.supplier.id) + 1}</span>
                       <h3 className="text-lg font-semibold text-[#16201d]">{item.supplier.name}</h3>
                       <span className="rounded-full bg-[#f1ede3] px-2.5 py-1 text-xs font-semibold text-[#16201d]">
                         {Math.round(item.discovery.fit_score)}% fit
@@ -711,7 +797,7 @@ export function SourcingChat() {
 
           {visibleRanked.length > 0 ? (
             <div className="grid gap-3">
-              {visibleRanked.map((item) => (
+              {visibleRanked.map((item, itemIndex) => (
                 <div
                   key={item.supplier.id}
                   className={cn(
@@ -723,14 +809,17 @@ export function SourcingChat() {
                 >
                   <Link
                     href={`/app/suppliers/${item.supplier.id}`}
-                    onClick={() => setSelectedId(item.supplier.id)}
+                    onClick={() => {
+                      setSelectedId(item.supplier.id)
+                      persistWorkspaceSnapshot(item.supplier.id)
+                    }}
                     className="grid min-w-0 gap-3 sm:grid-cols-[112px_1fr]"
                   >
                     <ProductPreviewImage supplier={item.supplier} className="h-24 rounded-xl" />
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
-                          <span className="rounded-md bg-[#d9b44a] px-2 py-0.5 text-xs font-semibold text-[#16201d]">#{item.discovery.rank}</span>
+                          <span className="rounded-md bg-[#d9b44a] px-2 py-0.5 text-xs font-semibold text-[#16201d]">#{itemIndex + 1}</span>
                           <h3 className="truncate text-base font-semibold text-[#16201d]">{displaySupplierName(item.supplier)}</h3>
                         </div>
                         <p className="mt-1 flex items-center gap-1.5 truncate text-sm text-[#66736f]">
@@ -763,6 +852,7 @@ export function SourcingChat() {
                     </button>
                     <Link
                       href={`/app/suppliers/${item.supplier.id}`}
+                      onClick={() => persistWorkspaceSnapshot(item.supplier.id)}
                       className="inline-flex items-center rounded-lg bg-[#16201d] px-4 py-2 text-sm font-semibold text-[#f7f4ec] transition hover:bg-[#24332f]"
                     >
                       View profile
@@ -881,15 +971,15 @@ function ProductOptionPreview({
   onSelectSize: (value: string | null) => void
 }) {
   return (
-    <div className="min-h-[520px] bg-[#16201d] p-5 text-[#f7f4ec] md:p-6">
+    <div className="min-h-[360px] bg-[#16201d] p-4 text-[#f7f4ec] md:p-5 lg:min-h-[520px] lg:p-6">
       <div className="space-y-5">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#d9b44a]">Product overview</p>
-          <h2 className="mt-2 font-serif text-4xl leading-none">{visual.displayName}</h2>
+          <h2 className="mt-2 font-serif text-3xl leading-none md:text-4xl">{visual.displayName}</h2>
         </div>
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#d9b44a]">Choose type</p>
-          <div className="mt-3 grid gap-4 sm:grid-cols-2">
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
             {visual.variants.map((variant) => (
               <ProductVariantCard
                 key={variant.name}
@@ -926,7 +1016,7 @@ function ProductOptionPreview({
 
         <div className="rounded-xl border border-white/12 bg-white/[0.06] p-4">
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#d9b44a]">Sourcing suggestions</p>
-          <div className="mt-3 grid gap-2 text-sm leading-6 text-[#dbe5df] sm:grid-cols-2">
+          <div className="mt-3 grid gap-2 text-sm leading-6 text-[#dbe5df] xl:grid-cols-2">
             <p>Compare at least 4 suppliers before choosing one. A cheaper unit price can lose money if MOQ, shipping, or defects are high.</p>
             <p>Start with the standard price band for realistic quotes, then use profit simulation to test low-cost and premium versions.</p>
           </div>
@@ -968,7 +1058,7 @@ function ProductVariantCard({
         selected ? "border-[#d9b44a] bg-[#d9b44a]/12 shadow-lg shadow-black/20" : "border-white/12",
       )}
     >
-      <div className="relative h-48 overflow-hidden bg-[#ece7dc]">
+      <div className="relative h-36 overflow-hidden bg-[#ece7dc] sm:h-40 lg:h-48">
         <img src={image.src} alt={`${variant.name} preview`} className="h-full w-full object-cover transition duration-300 group-hover:scale-105" loading="lazy" />
         <Dialog>
           <DialogTrigger asChild>
