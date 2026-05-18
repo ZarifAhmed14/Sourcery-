@@ -61,7 +61,6 @@ export function SimulationPanel({ suppliers, baseInputs }: Props) {
   const explainer = winnerChanged
     ? buildRankChangeExplainer(supplierById.get(baseWinner.supplier_id)?.name ?? "—", supplierById.get(simWinner.supplier_id)?.name ?? "—", deltas)
     : null
-
   // Reset all deltas back to no-change.
   const reset = () => setDeltas(defaultDeltas(baseInputs))
 

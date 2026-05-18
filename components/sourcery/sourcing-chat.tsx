@@ -644,12 +644,18 @@ export function SourcingChat() {
                 onSelectSize={setSelectedSize}
               />
             ) : (
-              <div className="flex h-full min-h-[360px] flex-col justify-between bg-[#fffdf7] p-6 text-[#16201d] lg:min-h-[520px] lg:p-8">
+              <div className="flex h-full min-h-[360px] flex-col justify-between bg-[radial-gradient(circle_at_top_left,rgba(217,180,74,0.14),transparent_38%),#fffdf7] p-6 text-[#16201d] lg:min-h-[520px] lg:p-8">
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#7a5b0f]">Product overview</p>
-                  <h2 className="mt-4 max-w-md font-serif text-5xl leading-none text-[#16201d]">Choose what you want to source.</h2>
+                  <h2 className="mt-4 max-w-md font-serif text-5xl leading-none text-[#16201d]">Start with a category and product.</h2>
                 </div>
-                <p className="max-w-sm text-sm leading-6 text-[#5d6965]">Pick a category and product to reveal a visual sourcing preview before running supplier intelligence.</p>
+                <div className="max-w-md space-y-3 text-sm leading-6 text-[#5d6965]">
+                  <p>Choose what you need, set a practical price band, and we&apos;ll surface the suppliers most likely to work for your order.</p>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <PreviewSignal icon={<Search className="h-3.5 w-3.5" />} title="Rank suppliers" detail="See price, MOQ, lead time, and fit in one view." />
+                    <PreviewSignal icon={<BarChart3 className="h-3.5 w-3.5" />} title="Model margin" detail="Compare cost and profit before you contact anyone." />
+                  </div>
+                </div>
               </div>
             )}
           </div>

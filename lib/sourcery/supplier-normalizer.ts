@@ -53,12 +53,24 @@ function asNumber(value: unknown, fallback = 0): number {
 }
 
 function asBoolean(value: unknown): boolean {
-  return value === true
+  if (value === true) return true
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase()
+    return ["true", "1", "yes", "y"].includes(normalized)
+  }
+  if (typeof value === "number") return value === 1
+  return false
 }
 
 function asStringArray(value: unknown): string[] {
-  if (!Array.isArray(value)) return []
-  return value.map((item) => String(item)).filter(Boolean)
+  if (Array.isArray(value)) return value.map((item) => String(item).trim()).filter(Boolean)
+  if (typeof value === "string") {
+    return value
+      .split(/[|,]/)
+      .map((item) => item.trim())
+      .filter(Boolean)
+  }
+  return []
 }
 
 export function normalizeCategory(value: unknown): SupplierCategory {
@@ -97,7 +109,7 @@ export function normalizeSupplier(row: SupplierDbRow): Supplier {
   const retrievalScore = asNumber(row.retrieval_score ?? row.similarity, NaN)
 
   return {
-    id: asString(row.id),
+    id: asString(row.id) || asString(row.supplier_id),
     name: asString(row.name, "Unnamed supplier"),
     country: asString(row.country, "Unknown"),
     city: asString(row.city, "Unknown"),
