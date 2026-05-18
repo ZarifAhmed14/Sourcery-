@@ -154,11 +154,23 @@ function rankSuppliersForQuery(
   const primaryPool = productMatched.length >= Math.min(topK, 4) ? productMatched : directlyMatched
   const pool = primaryPool.length > 0 ? primaryPool : filterByCategoryWithFallback(filteredUnique, category)
 
-  return pool
+  const rankedPrimary = pool
     .map((supplier) => ({ supplier, score: relevanceScore(supplier, query, category, filters) }))
     .sort((a, b) => b.score - a.score || b.supplier.quality_rating - a.supplier.quality_rating)
     .slice(0, topK)
     .map(({ supplier, score }) => ({ ...supplier, retrieval_score: score / 100 }))
+
+  if (rankedPrimary.length >= Math.min(3, topK)) return rankedPrimary
+
+  const used = new Set(rankedPrimary.map((s) => s.id))
+  const filler = filteredUnique
+    .filter((supplier) => !used.has(supplier.id))
+    .map((supplier) => ({ supplier, score: relevanceScore(supplier, query, category, filters) }))
+    .sort((a, b) => b.score - a.score || b.supplier.quality_rating - a.supplier.quality_rating)
+    .slice(0, Math.max(0, topK - rankedPrimary.length))
+    .map(({ supplier, score }) => ({ ...supplier, retrieval_score: score / 100 }))
+
+  return [...rankedPrimary, ...filler].slice(0, topK)
 }
 
 async function retrieveByVector(

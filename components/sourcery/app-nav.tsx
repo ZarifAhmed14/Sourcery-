@@ -18,6 +18,9 @@ type UserInfo = { id: string; email: string | null } | null
 export function AppNav({ user }: { user: UserInfo }) {
   void user
   const pathname = usePathname()
+  const visibleLinks = pathname.startsWith("/app/workflow")
+    ? LINKS.filter((link) => link.href !== "/app/dashboard")
+    : LINKS
 
   return (
     <header className="sticky top-0 z-30 w-full border-b border-black/10 bg-[#f7f4ec]/92 backdrop-blur-xl">
@@ -32,7 +35,7 @@ export function AppNav({ user }: { user: UserInfo }) {
         </Link>
 
         <nav className="order-3 flex w-full min-w-0 items-center gap-1 overflow-x-auto md:order-none md:w-auto md:gap-3">
-          {LINKS.map((l) => (
+          {visibleLinks.map((l) => (
             <Link
               key={l.href}
               href={l.href}

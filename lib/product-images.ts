@@ -6,12 +6,12 @@ type ProductImage = {
   credit: string
 }
 
-const GENERIC_PRODUCT_IMAGE = "https://images.pexels.com/photos/4483610/pexels-photo-4483610.jpeg?auto=compress&cs=tinysrgb&w=1400"
+const GENERIC_PRODUCT_IMAGE = "/placeholder.jpg"
 const VARIANT_PLACEHOLDER_IMAGES = [
-  "https://images.pexels.com/photos/4481259/pexels-photo-4481259.jpeg?auto=compress&cs=tinysrgb&w=1000",
-  "https://images.pexels.com/photos/4483609/pexels-photo-4483609.jpeg?auto=compress&cs=tinysrgb&w=1000",
-  "https://images.pexels.com/photos/4484077/pexels-photo-4484077.jpeg?auto=compress&cs=tinysrgb&w=1000",
-  "https://images.pexels.com/photos/4483610/pexels-photo-4483610.jpeg?auto=compress&cs=tinysrgb&w=1000",
+  "/placeholder.jpg",
+  "/placeholder-user.jpg",
+  "/placeholder.jpg",
+  "/placeholder-user.jpg",
 ]
 
 const CATEGORY_IMAGES: Record<SupplierCategory, string> = {
@@ -32,12 +32,12 @@ const PRODUCT_IMAGES: Record<string, string> = {
   bedding: GENERIC_PRODUCT_IMAGE,
   "canvas sneakers": CATEGORY_IMAGES.footwear,
   "cotton blankets": CATEGORY_IMAGES.home,
-  "cosmetic boxes": "https://cdn.pixabay.com/photo/2016/12/22/11/31/made-1925311_640.jpg",
+  "cosmetic boxes": "/placeholder.jpg",
   "cotton t-shirts": CATEGORY_IMAGES.apparel,
   "cotton-jute export totes": CATEGORY_IMAGES.accessories,
   "denim jeans": GENERIC_PRODUCT_IMAGE,
   "face serum": CATEGORY_IMAGES.beauty,
-  "folding cartons": "https://cdn.pixabay.com/photo/2016/12/22/11/31/made-1925311_640.jpg",
+  "folding cartons": "/placeholder.jpg",
   "honey jars": GENERIC_PRODUCT_IMAGE,
   "jute pouches": CATEGORY_IMAGES.packaging,
   "jute tote bags": CATEGORY_IMAGES.accessories,

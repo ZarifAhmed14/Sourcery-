@@ -22,6 +22,8 @@ import { TermHelp, TermLabel } from "@/components/sourcery/term-help"
 import { cn } from "@/lib/utils"
 import { usePreferences } from "@/lib/preferences-context"
 import {
+  consumeWorkspaceReturnIntent,
+  markWorkspaceReturnIntent,
   saveLatestResult,
   pushRecentQuery,
   readShortlistIds,
@@ -67,11 +69,11 @@ const REGION_LABELS: Record<"Any region" | SupplierRegion, string> = {
   "South Asia": "South Asia (Bangladesh, India, Pakistan)",
   "Southeast Asia": "Southeast Asia (Indonesia, Philippines, Thailand, Vietnam)",
   "East Asia": "East Asia (China)",
-  Europe: "Europe (Turkey)",
+  Europe: "Europe (disabled in demo)",
   MENA: "MENA (Turkey)",
-  Africa: "Africa",
-  "North America": "North America",
-  "South America": "South America",
+  Africa: "Africa (disabled in demo)",
+  "North America": "North America (disabled in demo)",
+  "South America": "South America (disabled in demo)",
 }
 
 const parseOptionalNumber = (value: string) => {
@@ -155,7 +157,7 @@ function plainRiskExplanation(supplier: Supplier, explanation?: string | null) {
 
 function displaySupplierName(supplier: Supplier) {
   return supplier.name
-    .replace(/^(Atlas|Bridge|Crown|Dragon|East|Evergreen|Global|Harbor|Indigo|Jade|Metro|Noble|Onyx|Pacific|Pioneer|Prime|River|Summit|Unity|Vertex)\s+/i, "")
+    .replace(/^(Atlas|Bridge|Crown|Dragon|East|Evergreen|Global|Harbor|Indigo|Jade|Metro|Noble|Onyx|Pacific|Pioneer|Prime|River|Summit|Unity|Vertex|Dhaka|Hanoi|Mumbai|Jakarta|Istanbul|Bengaluru|Karachi|Lahore|Noida|Chattogram|Chittagong)\s+/i, "")
     .replace(/\s+\d{2,4}$/i, "")
     .replace(/\s+Works$/i, " Co.")
     .trim()
@@ -182,13 +184,23 @@ export function SourcingChat() {
   const [selectedSize, setSelectedSize] = useState<string | null>(null)
   const [hasRestoredState, setHasRestoredState] = useState(false)
 
+  const resetSearchState = () => {
+    setStatus("idle")
+    setResult(null)
+    setError(null)
+    setHasSearched(false)
+    setSelectedId(null)
+  }
+
   useEffect(() => {
     const savedState = readWorkspaceState()
-    if (savedState) {
+    const shouldRestoreWorkspace = consumeWorkspaceReturnIntent()
+
+    if (savedState && shouldRestoreWorkspace) {
       setQuery(savedState.query ?? "")
       setHasSearched(Boolean(savedState.hasSearched))
       setSelectedCategory(savedState.selectedCategory as SupplierCategory | undefined)
-      setSelectedProduct(savedState.selectedProduct)
+      setSelectedProduct(savedState.selectedProduct ?? undefined)
       setSelectedCountry(savedState.selectedCountry ?? "Any country")
       setSelectedRegion((savedState.selectedRegion as "Any region" | SupplierRegion) ?? "Any region")
       setPriceBand((savedState.priceBand as PriceBandValue) ?? "standard")
@@ -196,13 +208,30 @@ export function SourcingChat() {
       setSelectedVariant(savedState.selectedVariant ?? null)
       setSelectedSize(savedState.selectedSize ?? null)
       setSelectedId(savedState.selectedId ?? null)
+    } else {
+      setQuery("")
+      setHasSearched(false)
+      setSelectedCategory(undefined)
+      setSelectedProduct(undefined)
+      setSelectedCountry("Any country")
+      setSelectedRegion("Any region")
+      setPriceBand("standard")
+      setOrderQuantity("")
+      setSelectedVariant(null)
+      setSelectedSize(null)
+      setSelectedId(null)
     }
 
-    const latest = typeof window !== "undefined" ? window.localStorage.getItem("sourcery.latest_result.v1") : null
+    const latest =
+      shouldRestoreWorkspace && typeof window !== "undefined"
+        ? window.localStorage.getItem("sourcery.latest_result.v1")
+        : null
     if (latest) {
       try {
         setResult(JSON.parse(latest) as SourcingResult)
       } catch {}
+    } else {
+      setResult(null)
     }
 
     const prefill = new URLSearchParams(window.location.search).get("prefill")
@@ -310,8 +339,9 @@ export function SourcingChat() {
   const visibleRanked = useMemo(() => {
     if (ranked.length === 0) return []
     const visibleIds = new Set(filteredPool.map((supplier) => supplier.id))
-    return ranked.filter((item) => visibleIds.has(item.supplier.id)).slice(0, 4)
+    return ranked.filter((item) => visibleIds.has(item.supplier.id)).slice(0, 5)
   }, [filteredPool, ranked])
+  const displayedRanked = hasSearched ? visibleRanked : []
 
   useEffect(() => {
     if (!hasRestoredState) return
@@ -346,8 +376,8 @@ export function SourcingChat() {
   useEffect(() => {
     if (!hasRestoredState) return
     if (!hasSearched) return
-    saveCompareSupplierIds(visibleRanked.map((item) => item.supplier.id))
-  }, [hasRestoredState, hasSearched, visibleRanked])
+    saveCompareSupplierIds(displayedRanked.map((item) => item.supplier.id))
+  }, [displayedRanked, hasRestoredState, hasSearched])
 
   const previewSuppliers = useMemo(() => {
     if (result) return []
@@ -355,13 +385,13 @@ export function SourcingChat() {
   }, [filteredPool, result])
 
   const selectedSupplier =
-    visibleRanked.find((item) => item.supplier.id === selectedId)?.supplier ??
+    displayedRanked.find((item) => item.supplier.id === selectedId)?.supplier ??
     filteredPool.find((item) => item.id === selectedId) ??
-    visibleRanked[0]?.supplier ??
+    displayedRanked[0]?.supplier ??
     filteredPool[0] ??
     null
 
-  const selectedBundle = visibleRanked.find((item) => item.supplier.id === selectedSupplier?.id) ?? null
+  const selectedBundle = displayedRanked.find((item) => item.supplier.id === selectedSupplier?.id) ?? null
 
   const mismatchWarning = useMemo(() => {
     if (!query.trim()) return null
@@ -414,7 +444,7 @@ export function SourcingChat() {
         body: JSON.stringify({
           query: composedQuery,
           bangladeshMode: false,
-          topK: 4,
+          topK: 5,
           category: selectedCategory,
           product: selectedProduct,
           country: bangladeshMode ? "Bangladesh" : selectedCountry === "Any country" ? null : selectedCountry,
@@ -484,7 +514,7 @@ export function SourcingChat() {
       selectedSize,
       selectedId: nextSelectedId ?? selectedId,
     })
-    saveCompareSupplierIds(visibleRanked.map((item) => item.supplier.id))
+    saveCompareSupplierIds(displayedRanked.map((item) => item.supplier.id))
   }
 
   const filterPanel = (
@@ -493,6 +523,7 @@ export function SourcingChat() {
         <Select
           value={selectedCategory}
           onValueChange={(value) => {
+            resetSearchState()
             const category = value as SupplierCategory
             setSelectedCategory(category)
             setSelectedProduct(undefined)
@@ -518,6 +549,7 @@ export function SourcingChat() {
         <Select
           value={selectedProduct}
           onValueChange={(product) => {
+            resetSearchState()
             setSelectedProduct(product)
             setSelectedVariant(null)
             setSelectedSize(null)
@@ -539,7 +571,13 @@ export function SourcingChat() {
       </FilterBlock>
 
       <FilterBlock label="Region">
-        <Select value={selectedRegion} onValueChange={(value) => setSelectedRegion(value as "Any region" | SupplierRegion)}>
+        <Select
+          value={selectedRegion}
+          onValueChange={(value) => {
+            resetSearchState()
+            setSelectedRegion(value as "Any region" | SupplierRegion)
+          }}
+        >
           <SelectTrigger className="h-9 w-full border-black/10 bg-[#f7f4ec] text-sm text-[#16201d]">
             <SelectValue placeholder="Select region" />
           </SelectTrigger>
@@ -554,7 +592,13 @@ export function SourcingChat() {
       </FilterBlock>
 
       <FilterBlock label="Country">
-        <Select value={selectedCountry} onValueChange={setSelectedCountry}>
+        <Select
+          value={selectedCountry}
+          onValueChange={(value) => {
+            resetSearchState()
+            setSelectedCountry(value)
+          }}
+        >
           <SelectTrigger className="h-9 w-full border-black/10 bg-[#f7f4ec] text-sm text-[#16201d]">
             <SelectValue placeholder="Select country" />
           </SelectTrigger>
@@ -569,7 +613,13 @@ export function SourcingChat() {
       </FilterBlock>
 
       <FilterBlock label="Target unit price">
-        <Select value={priceBand} onValueChange={(value) => setPriceBand(value as PriceBandValue)}>
+        <Select
+          value={priceBand}
+          onValueChange={(value) => {
+            resetSearchState()
+            setPriceBand(value as PriceBandValue)
+          }}
+        >
           <SelectTrigger className="h-9 w-full border-black/10 bg-[#f7f4ec] text-sm text-[#16201d]">
             <SelectValue placeholder="Choose price band" />
           </SelectTrigger>
@@ -587,7 +637,10 @@ export function SourcingChat() {
         <Input
           inputMode="numeric"
           value={orderQuantity}
-          onChange={(event) => setOrderQuantity(event.target.value)}
+          onChange={(event) => {
+            resetSearchState()
+            setOrderQuantity(event.target.value)
+          }}
           placeholder="e.g. 1000"
           className="h-9 border-black/10 bg-[#f7f4ec] text-sm text-[#16201d] placeholder:text-[#85918c]"
         />
@@ -606,7 +659,10 @@ export function SourcingChat() {
               <div className="space-y-3 border-t border-black/10 pt-4">
                 <Textarea
                   value={query}
-                  onChange={(event) => setQuery(event.target.value)}
+                  onChange={(event) => {
+                    resetSearchState()
+                    setQuery(event.target.value)
+                  }}
                   rows={3}
                   disabled={status === "loading"}
                   className="resize-none rounded-xl border-black/10 bg-[#fbf8f1] text-base leading-7 text-[#16201d] shadow-none placeholder:text-[#7f8a85] focus-visible:ring-[#d9b44a]"
@@ -668,7 +724,10 @@ export function SourcingChat() {
           <form onSubmit={onSubmit} className="space-y-3 border-t border-black/10 pt-4">
             <Textarea
               value={query}
-              onChange={(event) => setQuery(event.target.value)}
+              onChange={(event) => {
+                resetSearchState()
+                setQuery(event.target.value)
+              }}
               rows={2}
               disabled={status === "loading"}
               className="resize-none rounded-xl border-black/10 bg-[#fbf8f1] text-base leading-7 text-[#16201d] shadow-none placeholder:text-[#7f8a85] focus-visible:ring-[#d9b44a]"
@@ -712,7 +771,7 @@ export function SourcingChat() {
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="rounded-md bg-[#d9b44a] px-2.5 py-1 text-xs font-semibold text-[#16201d]">#{visibleRanked.findIndex((entry) => entry.supplier.id === item.supplier.id) + 1}</span>
-                      <h3 className="text-lg font-semibold text-[#16201d]">{item.supplier.name}</h3>
+                      <h3 className="text-lg font-semibold text-[#16201d]">{displaySupplierName(item.supplier)}</h3>
                       <span className="rounded-full bg-[#f1ede3] px-2.5 py-1 text-xs font-semibold text-[#16201d]">
                         {Math.round(item.discovery.fit_score)}% fit
                       </span>
@@ -774,10 +833,10 @@ export function SourcingChat() {
                 </div>
               </article>
             ))}
-            {status === "loading" && visibleRanked.length === 0 && (
+            {status === "loading" && displayedRanked.length === 0 && (
               <div className="rounded-2xl border border-black/10 bg-white p-8 text-sm text-[#6d7a75]">Running supplier intelligence…</div>
             )}
-            {status !== "loading" && visibleRanked.length === 0 && previewSuppliers.length === 0 && (
+            {status !== "loading" && displayedRanked.length === 0 && previewSuppliers.length === 0 && (
                 <div className="rounded-2xl border border-dashed border-black/12 bg-[#fffdf9] p-8 text-sm text-[#6d7a75]">
                   No suppliers matched this combination. Adjust the filters and run sourcing again.
                 </div>
@@ -790,7 +849,7 @@ export function SourcingChat() {
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#6d7a75]">Ranked suppliers</p>
               <p className="mt-1 text-sm text-[#53605c]">
-                {visibleRanked.length > 0 ? "Click a supplier to open the decision profile." : "Run a search to rank suppliers."}
+                {displayedRanked.length > 0 ? "Click a supplier to open the decision profile." : "Run a search to rank suppliers."}
               </p>
             </div>
             <Button asChild variant="outline" className="rounded-lg border-black/10 bg-transparent text-[#16201d] hover:bg-[#f1ede3] hover:text-[#16201d]">
@@ -801,9 +860,9 @@ export function SourcingChat() {
             </Button>
           </div>
 
-          {visibleRanked.length > 0 ? (
+          {displayedRanked.length > 0 ? (
             <div className="grid gap-3">
-              {visibleRanked.map((item, itemIndex) => (
+              {displayedRanked.map((item, itemIndex) => (
                 <div
                   key={item.supplier.id}
                   className={cn(
@@ -818,6 +877,7 @@ export function SourcingChat() {
                     onClick={() => {
                       setSelectedId(item.supplier.id)
                       persistWorkspaceSnapshot(item.supplier.id)
+                      markWorkspaceReturnIntent()
                     }}
                     className="grid min-w-0 gap-3 sm:grid-cols-[112px_1fr]"
                   >
@@ -858,7 +918,10 @@ export function SourcingChat() {
                     </button>
                     <Link
                       href={`/app/suppliers/${item.supplier.id}`}
-                      onClick={() => persistWorkspaceSnapshot(item.supplier.id)}
+                      onClick={() => {
+                        persistWorkspaceSnapshot(item.supplier.id)
+                        markWorkspaceReturnIntent()
+                      }}
                       className="inline-flex items-center rounded-lg bg-[#16201d] px-4 py-2 text-sm font-semibold text-[#f7f4ec] transition hover:bg-[#24332f]"
                     >
                       View profile
@@ -867,6 +930,24 @@ export function SourcingChat() {
                   </div>
                 </div>
               ))}
+            </div>
+          ) : selectedProduct && productVisual ? (
+            <div className="overflow-hidden rounded-2xl border border-black/10 bg-white/78 shadow-sm">
+              <ProductOptionPreview
+                category={selectedCategory}
+                product={selectedProduct}
+                visual={productVisual}
+                selectedVariant={selectedVariant}
+                selectedSize={selectedSize}
+                onSelectVariant={(value) => {
+                  resetSearchState()
+                  setSelectedVariant(value)
+                }}
+                onSelectSize={(value) => {
+                  resetSearchState()
+                  setSelectedSize(value)
+                }}
+              />
             </div>
           ) : (
             <div className="rounded-xl border border-dashed border-black/12 bg-[#fffdf9] px-4 py-10 text-center text-sm text-[#6d7a75]">
@@ -906,7 +987,7 @@ function PreviewSupplierCard({ supplier, onSelect, bangladeshMode = false }: { s
     <article className="rounded-2xl border border-black/10 bg-white p-4 transition hover:border-[#d9b44a]/35 hover:shadow-sm">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <button type="button" onClick={onSelect} className="min-w-0 text-left">
-          <div className="truncate text-lg font-semibold text-[#16201d]">{supplier.name}</div>
+          <div className="truncate text-lg font-semibold text-[#16201d]">{displaySupplierName(supplier)}</div>
           <p className="mt-1.5 flex flex-wrap items-center gap-2 text-sm text-[#66736f]">
             <MapPin className="h-4 w-4 text-[#d9b44a]" />
             {supplier.city}, {supplier.country}
@@ -946,7 +1027,7 @@ function PreviewMiniSupplier({ supplier, onSelect, bangladeshMode = false }: { s
       onClick={onSelect}
       className="rounded-2xl border border-black/10 bg-[#fffdf9] p-3 text-left transition hover:border-[#d9b44a]/45 hover:bg-white"
     >
-      <div className="truncate text-sm font-semibold text-[#16201d]">{supplier.name}</div>
+      <div className="truncate text-sm font-semibold text-[#16201d]">{displaySupplierName(supplier)}</div>
       <div className="mt-1 flex items-center gap-1.5 truncate text-xs text-[#66736f]">
         <MapPin className="h-3.5 w-3.5 shrink-0 text-[#d9b44a]" />
         {supplier.city}, {supplier.country}

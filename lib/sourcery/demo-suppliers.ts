@@ -12,7 +12,7 @@ function loadDatasetRows(): SupplierDatasetRow[] {
     process.cwd(),
     "outputs",
     "supplier-dataset",
-    "sourcery_supplier_dataset_final.json",
+    "sourcery_supplier_dataset_actual_names.json",
   )
   const raw = readFileSync(datasetPath, "utf-8")
   const parsed = JSON.parse(raw) as SupplierDatasetRow[]
@@ -25,7 +25,13 @@ function getDatasetSuppliers(): Supplier[] {
   const rows = loadDatasetRows()
   datasetCache = rows
     .map((row) => normalizeSupplier(row))
-    .filter((supplier) => supplier.id && supplier.name)
+    .filter(
+      (supplier) =>
+        supplier.id &&
+        supplier.name &&
+        !/\b(poland|portugal)\b/i.test(supplier.country) &&
+        supplier.region !== "Europe",
+    )
   return datasetCache
 }
 

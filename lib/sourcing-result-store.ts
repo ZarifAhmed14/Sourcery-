@@ -11,6 +11,7 @@ const RECENT_KEY = "sourcery.recent_queries.v1"
 const SHORTLIST_KEY = "sourcery.shortlist_ids.v1"
 const WORKSPACE_KEY = "sourcery.workspace_state.v1"
 const COMPARE_IDS_KEY = "sourcery.compare_ids.v1"
+const WORKSPACE_RETURN_KEY = "sourcery.workspace_return.v1"
 
 // Stable summary shape used for the recent searches list.
 export type RecentQuery = {
@@ -148,5 +149,27 @@ export function readCompareSupplierIds(): string[] {
   } catch (err) {
     console.log("[v0] readCompareSupplierIds error:", (err as Error).message)
     return []
+  }
+}
+
+export function markWorkspaceReturnIntent(): void {
+  try {
+    if (typeof window === "undefined") return
+    window.sessionStorage.setItem(WORKSPACE_RETURN_KEY, "1")
+  } catch (err) {
+    console.log("[v0] markWorkspaceReturnIntent error:", (err as Error).message)
+  }
+}
+
+export function consumeWorkspaceReturnIntent(): boolean {
+  try {
+    if (typeof window === "undefined") return false
+    const raw = window.sessionStorage.getItem(WORKSPACE_RETURN_KEY)
+    if (raw !== "1") return false
+    window.sessionStorage.removeItem(WORKSPACE_RETURN_KEY)
+    return true
+  } catch (err) {
+    console.log("[v0] consumeWorkspaceReturnIntent error:", (err as Error).message)
+    return false
   }
 }

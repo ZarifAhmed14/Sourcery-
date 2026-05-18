@@ -54,8 +54,7 @@ export function ProfitPanel({ suppliers, inputs, onChange }: Props) {
 
   // Single update helper to keep input handlers concise.
   const update = (k: keyof ProfitInputs, v: number) => onChange({ ...inputs, [k]: v })
-  const maxProfit = useMemo(() => Math.max(...ranked.map((r) => Math.max(r.total_profit, 0)), 1), [ranked])
-  const maxLandedCost = useMemo(() => Math.max(...ranked.map((r) => r.landed_cost), 1), [ranked])
+  
 
   return (
     <section className="rounded-lg border border-black/10 bg-white p-5 shadow-sm">
@@ -81,77 +80,6 @@ export function ProfitPanel({ suppliers, inputs, onChange }: Props) {
         <NumberField id="customs" label="Customs %" suffix="%" step={0.5} value={inputs.customs_rate} onChange={(v) => update("customs_rate", v)} />
         <NumberField id="packaging" label="Packaging / unit" suffix="$" step={0.1} value={inputs.packaging_cost_per_unit} onChange={(v) => update("packaging_cost_per_unit", v)} />
         <NumberField id="qty" label="Order qty" suffix="" step={50} value={inputs.order_quantity} onChange={(v) => update("order_quantity", Math.max(1, Math.round(v)))} />
-      </div>
-
-      <div className="mt-4 grid gap-3 lg:grid-cols-[1.05fr_0.95fr]">
-        <div className="rounded-lg border border-black/10 bg-[#fffdf8] p-4">
-          <div className="mb-3 flex items-center justify-between">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#7a5b0f]">Profit spread</p>
-              <p className="mt-1 text-sm text-[#5d6965]">A quick view of who actually leaves more money on the table after costs and risk.</p>
-            </div>
-            <span className="text-xs text-[#6d7a75]">Higher is better</span>
-          </div>
-          <div className="space-y-3">
-            {suppliers.map((s) => {
-              const p = byId.get(s.id)
-              if (!p) return null
-              const width = Math.max(8, Math.round((Math.max(p.total_profit, 0) / maxProfit) * 100))
-              return (
-                <div key={`${s.id}-profitbar`} className="space-y-1.5">
-                  <div className="flex items-center justify-between gap-3 text-sm">
-                    <span className="truncate font-medium text-[#16201d]">{s.name}</span>
-                    <span className="font-mono text-[#16201d]">{formatMoney(p.total_profit, bangladeshMode)}</span>
-                  </div>
-                  <div className="h-3 overflow-hidden rounded-full bg-[#ece3d2]">
-                    <div
-                      className={cn(
-                        "h-full rounded-full transition-all duration-500",
-                        p.total_profit < 0 ? "bg-rose-500" : p.recommended_type === "max_profit" ? "bg-[#16201d]" : p.recommended_type === "balanced" ? "bg-[#d9b44a]" : "bg-emerald-600",
-                      )}
-                      style={{ width: `${p.total_profit < 0 ? 12 : width}%` }}
-                    />
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        </div>
-
-        <div className="rounded-lg border border-black/10 bg-[#fffdf8] p-4">
-          <div className="mb-3">
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#7a5b0f]">Landed cost vs selling price</p>
-            <p className="mt-1 text-sm text-[#5d6965]">Shows how much of your final selling price is already consumed before marketing or overhead.</p>
-          </div>
-          <div className="space-y-3">
-            {suppliers.map((s) => {
-              const p = byId.get(s.id)
-              if (!p) return null
-              const landedWidth = Math.min(100, Math.round((p.landed_cost / Math.max(inputs.selling_price, 1)) * 100))
-              const costBandWidth = Math.max(10, Math.round((p.landed_cost / maxLandedCost) * 100))
-              return (
-                <div key={`${s.id}-costbar`} className="space-y-1.5">
-                  <div className="flex items-center justify-between gap-3 text-sm">
-                    <span className="truncate font-medium text-[#16201d]">{s.name}</span>
-                    <span className="font-mono text-[#53605c]">{formatMoney(p.landed_cost, bangladeshMode)}</span>
-                  </div>
-                  <div className="space-y-1">
-                    <div className="h-3 overflow-hidden rounded-full bg-[#ece3d2]">
-                      <div className="h-full rounded-full bg-[#d9b44a] transition-all duration-500" style={{ width: `${landedWidth}%` }} />
-                    </div>
-                    <div className="flex items-center justify-between text-[11px] text-[#6d7a75]">
-                      <span>vs selling price</span>
-                      <span>{landedWidth}% used</span>
-                    </div>
-                    <div className="h-1.5 overflow-hidden rounded-full bg-[#f3ecde]">
-                      <div className="h-full rounded-full bg-[#16201d]/70 transition-all duration-500" style={{ width: `${costBandWidth}%` }} />
-                    </div>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        </div>
       </div>
 
       {/* Per-supplier rows. */}

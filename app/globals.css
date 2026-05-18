@@ -176,3 +176,62 @@
     50% { opacity: 1; transform: scale(1.1); }
   }
 }
+
+/* Material You experiment route only (/app-m3) */
+.m3-theme {
+  --m3-bg: #FFFBFE;
+  --m3-on-bg: #1C1B1F;
+  --m3-primary: #6750A4;
+  --m3-on-primary: #FFFFFF;
+  --m3-secondary-container: #E8DEF8;
+  --m3-surface-container: #F3EDF7;
+  --m3-surface-low: #E7E0EC;
+  --m3-outline: #79747E;
+  --m3-on-variant: #49454F;
+}
+
+.m3-theme .rounded-2xl,
+.m3-theme .rounded-xl,
+.m3-theme [class*="rounded-2xl"] {
+  border-radius: 24px !important;
+}
+
+.m3-theme button,
+.m3-theme [role="button"],
+.m3-theme a.inline-flex,
+.m3-theme .btn,
+.m3-theme [class*="rounded-lg"][class*="px-"] {
+  border-radius: 9999px !important;
+}
+
+.m3-theme input,
+.m3-theme textarea,
+.m3-theme [data-slot="select-trigger"] {
+  background: var(--m3-surface-low) !important;
+  border-color: color-mix(in oklab, var(--m3-outline) 60%, transparent) !important;
+  color: var(--m3-on-bg) !important;
+}
+
+.m3-theme .bg-\[\#f7f4ec\],
+.m3-theme .bg-\[\#fffdf9\],
+.m3-theme .bg-white\/78,
+.m3-theme .bg-white\/72 {
+  background: var(--m3-surface-container) !important;
+}
+
+.m3-theme .bg-\[\#16201d\] {
+  background: var(--m3-primary) !important;
+}
+
+.m3-theme .text-\[\#f7f4ec\] {
+  color: var(--m3-on-primary) !important;
+}
+
+.m3-theme .text-\[\#16201d\] {
+  color: var(--m3-on-bg) !important;
+}
+
+.m3-theme .border-black\/10,
+.m3-theme .border-black\/12 {
+  border-color: color-mix(in oklab, var(--m3-outline) 28%, transparent) !important;
+}

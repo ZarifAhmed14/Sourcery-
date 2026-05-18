@@ -18,6 +18,11 @@ const featureStrip = [
 export default function HomePage() {
   return (
     <div className="min-h-screen overflow-hidden bg-[#f7f4ec] text-[#16201d]">
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(circle_at_80%_10%,rgba(217,180,74,0.16),transparent_28%),radial-gradient(circle_at_10%_90%,rgba(103,80,164,0.10),transparent_30%)]"
+      />
+
       <header className="border-b border-black/10 bg-[#f7f4ec]/92 backdrop-blur-xl">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-5 md:px-8">
           <Link href="/" className="flex items-center gap-3">
@@ -44,8 +49,15 @@ export default function HomePage() {
             <h1 className="mt-4 font-serif text-5xl leading-[0.95] text-[#13201b] md:text-6xl">
               Source suppliers with margin, risk, and readiness intelligence.
             </h1>
+            <p className="mt-5 max-w-lg text-base leading-7 text-[#5f6b67]">
+              Built for small and growing brands that need faster supplier decisions without sacrificing margin or reliability.
+            </p>
             <div className="mt-8">
-              <Button asChild size="lg" className="h-12 rounded-md bg-[#16201d] px-6 text-[#f7f4ec] hover:bg-[#24332f]">
+              <Button
+                asChild
+                size="lg"
+                className="h-12 rounded-full bg-[#16201d] px-7 text-[#f7f4ec] shadow-sm transition-all duration-300 hover:bg-[#24332f] hover:shadow-md active:scale-95"
+              >
                 <Link href="/app">
                   Open sourcing workspace
                   <ArrowRight className="ml-2 h-4 w-4" />
@@ -54,14 +66,14 @@ export default function HomePage() {
             </div>
           </div>
 
-          <div className="overflow-hidden rounded-[24px] border border-[#16201d]/12 bg-[linear-gradient(180deg,#f3ecde_0%,#eee4d1_100%)] shadow-[0_24px_70px_rgba(22,32,29,0.10)]">
+          <div className="overflow-hidden rounded-[32px] border border-[#16201d]/12 bg-[linear-gradient(180deg,#f3ecde_0%,#eee4d1_100%)] shadow-[0_24px_70px_rgba(22,32,29,0.10)] transition-all duration-300 hover:shadow-[0_28px_90px_rgba(22,32,29,0.14)]">
             <div className="grid border-b border-[#16201d]/10 lg:grid-cols-[0.46fr_0.54fr]">
               <div className="border-r border-[#16201d]/10 bg-[#f6f0e4]/80 p-5">
-                <div className="rounded-2xl border border-[#16201d]/10 bg-[#fbf7ef] p-4">
+                <div className="rounded-[24px] border border-[#16201d]/10 bg-[#fbf7ef] p-4">
                   <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#6d7a75]">Category</p>
                   <p className="mt-2 text-base font-medium text-[#16201d]">Bags & accessories</p>
                 </div>
-                <div className="mt-3 rounded-2xl border border-[#16201d]/10 bg-[#fbf7ef] p-4">
+                <div className="mt-3 rounded-[24px] border border-[#16201d]/10 bg-[#fbf7ef] p-4">
                   <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#6d7a75]">Product</p>
                   <p className="mt-2 text-base font-medium text-[#16201d]">jute tote bags</p>
                 </div>
@@ -86,7 +98,10 @@ export default function HomePage() {
 
                 <div className="space-y-3">
                   {supplierRows.map((row, index) => (
-                    <div key={row.name} className="rounded-2xl border border-[#16201d]/10 bg-[#fffaf0] p-4">
+                    <div
+                      key={row.name}
+                      className="rounded-[24px] border border-[#16201d]/10 bg-[#fffaf0] p-4 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md"
+                    >
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
                           <div className="flex items-center gap-2">
@@ -114,7 +129,7 @@ export default function HomePage() {
 
             <div className="grid grid-cols-2 divide-x divide-y divide-[#16201d]/10 bg-[#ece3d2] text-xs text-[#53605c] md:grid-cols-4 md:divide-y-0">
               {featureStrip.map(({ icon: Icon, label }) => (
-                <div key={label} className="flex items-center gap-2 px-4 py-3">
+                <div key={label} className="flex items-center gap-2 px-4 py-3 transition-colors hover:bg-[#f6efdf]">
                   <Icon className="h-4 w-4 text-[#7a5b0f]" />
                   <span className="font-medium">{label}</span>
                 </div>
