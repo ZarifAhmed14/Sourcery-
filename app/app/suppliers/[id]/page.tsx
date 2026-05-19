@@ -19,6 +19,8 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { CurrencyValue } from "@/components/sourcery/currency-value"
 import { TermLabel } from "@/components/sourcery/term-help"
+import { findDemoSupplier } from "@/lib/sourcery/demo-suppliers"
+import { enrichSupplierProfileFields } from "@/lib/sourcery/supplier-profile-enrichment"
 import { getAdminClient, isAdminSupabaseConfigured } from "@/lib/supabase/admin"
 import { normalizeSupplier } from "@/lib/sourcery/supplier-normalizer"
 import { getProductImage } from "@/lib/product-images"
@@ -82,20 +84,70 @@ function negotiationDraft(supplier: ReturnType<typeof normalizeSupplier>) {
   ].join("\n\n")
 }
 
-export default async function SupplierDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params
+type SupplierPageData = {
+  supplier: ReturnType<typeof normalizeSupplier>
+  metadata: { port?: string; sample_days?: number; incoterms?: string[] }
+  paymentTerms: string
+  website: string | null
+  monthlyCapacity: number | null
+}
 
-  if (!isAdminSupabaseConfigured()) notFound()
+async function loadSupplierPageData(id: string): Promise<SupplierPageData | null> {
+  const demo = findDemoSupplier(id)
+
+  if (!isAdminSupabaseConfigured()) {
+    if (!demo) return null
+    const enriched = enrichSupplierProfileFields({ supplier: demo })
+    return {
+      supplier: demo,
+      metadata: enriched.metadata,
+      paymentTerms: enriched.paymentTerms,
+      website: demo.source_url ?? null,
+      monthlyCapacity: enriched.monthlyCapacity,
+    }
+  }
 
   const supabase = getAdminClient()
   const { data, error } = await supabase.from("suppliers").select("*").eq("id", id).maybeSingle()
-  if (error || !data) notFound()
+  if (error) throw new Error(error.message)
+
+  if (!data) {
+    if (!demo) return null
+    const enriched = enrichSupplierProfileFields({ supplier: demo })
+    return {
+      supplier: demo,
+      metadata: enriched.metadata,
+      paymentTerms: enriched.paymentTerms,
+      website: demo.source_url ?? null,
+      monthlyCapacity: enriched.monthlyCapacity,
+    }
+  }
 
   const supplier = normalizeSupplier(data)
+  const enriched = enrichSupplierProfileFields({
+    supplier,
+    metadata: (data.metadata ?? {}) as SupplierPageData["metadata"],
+    paymentTerms: typeof data.payment_terms === "string" ? data.payment_terms : null,
+    monthlyCapacity: typeof data.monthly_capacity === "number" ? data.monthly_capacity : null,
+  })
+
+  return {
+    supplier,
+    metadata: enriched.metadata,
+    paymentTerms: enriched.paymentTerms,
+    website: typeof data.website === "string" && data.website.startsWith("http") ? data.website : supplier.source_url,
+    monthlyCapacity: enriched.monthlyCapacity,
+  }
+}
+
+export default async function SupplierDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params
+
+  const pageData = await loadSupplierPageData(id)
+  if (!pageData) notFound()
+
+  const { supplier, metadata, paymentTerms, website, monthlyCapacity } = pageData
   const image = getProductImage({ supplier })
-  const metadata = (data.metadata ?? {}) as { port?: string; sample_days?: number; incoterms?: string[] }
-  const paymentTerms = typeof data.payment_terms === "string" ? data.payment_terms : "Quoted during outreach"
-  const website = typeof data.website === "string" && data.website.startsWith("http") ? data.website : supplier.source_url
   const riskTone =
     supplier.risk_score <= 30
       ? "border-emerald-500/25 bg-emerald-50 text-emerald-800"
@@ -158,11 +210,11 @@ export default async function SupplierDetailPage({ params }: { params: Promise<{
         <div className="rounded-lg border border-black/10 bg-white p-5 shadow-sm">
           <h2 className="text-xl font-semibold text-[#16201d]">Supplier facts</h2>
           <div className="mt-5 grid gap-3">
-            <Fact icon={Factory} label="Monthly capacity" value={typeof data.monthly_capacity === "number" ? data.monthly_capacity.toLocaleString() : "Not listed"} />
+            <Fact icon={Factory} label="Monthly capacity" value={monthlyCapacity ? monthlyCapacity.toLocaleString() : "Estimated during profile build"} />
             <Fact icon={Clock} label="On-time rate" value={`${supplier.on_time_rate}%`} />
             <Fact icon={ShieldCheck} label="Payment terms" value={paymentTerms} />
-            <Fact icon={Globe2} label="Port" value={metadata.port ?? "Not listed"} />
-            <Fact icon={Box} label="Sample time" value={typeof metadata.sample_days === "number" ? `${metadata.sample_days} days` : "Not listed"} />
+            <Fact icon={Globe2} label="Port" value={metadata.port ?? "Main export port"} />
+            <Fact icon={Box} label="Sample time" value={`${metadata.sample_days ?? 7} days`} />
           </div>
           {website && (
             <Button asChild variant="outline" className="mt-5 w-full rounded-md bg-transparent">

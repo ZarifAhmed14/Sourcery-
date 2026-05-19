@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react"
 import Link from "next/link"
 import {
-  AlertTriangle,
   ArrowRight,
   BadgeCheck,
   BarChart3,
@@ -17,7 +16,6 @@ import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Textarea } from "@/components/ui/textarea"
 import { TermHelp, TermLabel } from "@/components/sourcery/term-help"
 import { cn } from "@/lib/utils"
 import { usePreferences } from "@/lib/preferences-context"
@@ -83,11 +81,6 @@ const parseOptionalNumber = (value: string) => {
   return Number.isFinite(parsed) ? parsed : undefined
 }
 
-const normalizeOptionalText = (value: string) => {
-  const trimmed = value.trim()
-  return trimmed.length > 0 ? trimmed : null
-}
-
 function priceBandLabel(band: ProductPriceBand, bangladeshMode: boolean) {
   if (typeof band.min !== "number" || typeof band.max !== "number") return band.label
   const label = band.value.charAt(0).toUpperCase() + band.value.slice(1)
@@ -104,7 +97,6 @@ function buildSourcingQuery(args: {
   targetPriceMin?: number
   targetPriceMax?: number
   orderQuantity?: number
-  extraDetail?: string | null
 }) {
   const parts = [
     `${productDisplayName(args.product)} suppliers`,
@@ -116,7 +108,6 @@ function buildSourcingQuery(args: {
     typeof args.targetPriceMin === "number" ? `min unit price $${args.targetPriceMin}` : null,
     typeof args.targetPriceMax === "number" ? `max unit price $${args.targetPriceMax}` : null,
     typeof args.orderQuantity === "number" ? `order quantity ${args.orderQuantity} units` : null,
-    args.extraDetail ? `extra detail ${args.extraDetail}` : null,
   ].filter(Boolean)
 
   return parts.join(", ")
@@ -163,10 +154,25 @@ function displaySupplierName(supplier: Supplier) {
     .trim()
 }
 
+function extractApiErrorMessage(payload: unknown): string | null {
+  if (!payload || typeof payload !== "object") return null
+
+  const record = payload as {
+    error?: string | { message?: string | null }
+    message?: string | null
+  }
+
+  if (typeof record.error === "string" && record.error.trim()) return record.error
+  if (record.error && typeof record.error === "object" && typeof record.error.message === "string" && record.error.message.trim()) {
+    return record.error.message
+  }
+  if (typeof record.message === "string" && record.message.trim()) return record.message
+  return null
+}
+
 export function SourcingChat() {
   const { bangladeshMode } = usePreferences()
 
-  const [query, setQuery] = useState("")
   const [status, setStatus] = useState<"idle" | "loading" | "done" | "error">("idle")
   const [result, setResult] = useState<SourcingResult | null>(null)
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
@@ -197,7 +203,6 @@ export function SourcingChat() {
     const shouldRestoreWorkspace = consumeWorkspaceReturnIntent()
 
     if (savedState && shouldRestoreWorkspace) {
-      setQuery(savedState.query ?? "")
       setHasSearched(Boolean(savedState.hasSearched))
       setSelectedCategory(savedState.selectedCategory as SupplierCategory | undefined)
       setSelectedProduct(savedState.selectedProduct ?? undefined)
@@ -209,7 +214,6 @@ export function SourcingChat() {
       setSelectedSize(savedState.selectedSize ?? null)
       setSelectedId(savedState.selectedId ?? null)
     } else {
-      setQuery("")
       setHasSearched(false)
       setSelectedCategory(undefined)
       setSelectedProduct(undefined)
@@ -233,9 +237,6 @@ export function SourcingChat() {
     } else {
       setResult(null)
     }
-
-    const prefill = new URLSearchParams(window.location.search).get("prefill")
-    if (prefill) setQuery(prefill)
 
     setHasRestoredState(true)
   }, [])
@@ -342,11 +343,15 @@ export function SourcingChat() {
     return ranked.filter((item) => visibleIds.has(item.supplier.id)).slice(0, 5)
   }, [filteredPool, ranked])
   const displayedRanked = hasSearched ? visibleRanked : []
+  const noAvailableSuppliersMessage =
+    hasSearched && status !== "loading" && displayedRanked.length === 0
+      ? "Sorry, there are no available suppliers for this product in this region at the moment. Please try again or explore a different product."
+      : null
 
   useEffect(() => {
     if (!hasRestoredState) return
     saveWorkspaceState({
-      query,
+      query: "",
       hasSearched,
       selectedCategory,
       selectedProduct,
@@ -363,7 +368,6 @@ export function SourcingChat() {
     hasSearched,
     orderQuantity,
     priceBand,
-    query,
     selectedCategory,
     selectedCountry,
     selectedId,
@@ -393,23 +397,6 @@ export function SourcingChat() {
 
   const selectedBundle = displayedRanked.find((item) => item.supplier.id === selectedSupplier?.id) ?? null
 
-  const mismatchWarning = useMemo(() => {
-    if (!query.trim()) return null
-    const lowered = query.toLowerCase()
-    if (!selectedCategory) return null
-    const selectedGroup = SUPPORTED_PRODUCT_CATALOG.find((item) => item.category === selectedCategory)
-    if (!selectedGroup) return null
-    const ownMatch = selectedGroup.products.some((product) => lowered.includes(product.toLowerCase()))
-    if (ownMatch) return null
-    const foreign = SUPPORTED_PRODUCT_CATALOG.find(
-      (item) =>
-        item.category !== selectedCategory &&
-        item.products.some((product) => lowered.includes(product.toLowerCase())),
-    )
-    if (!foreign) return null
-    return `Your brief sounds closer to ${foreign.label}, but the selected category is ${selectedGroup.label}. Adjust filters or continue anyway.`
-  }, [query, selectedCategory])
-
   const executeSourcing = async () => {
     if (!selectedCategory || !selectedProduct) {
       setError("Choose a category and product first.")
@@ -430,7 +417,6 @@ export function SourcingChat() {
       targetPriceMin: targetUnitPriceMin,
       targetPriceMax: targetUnitPriceMax,
       orderQuantity: normalizedOrderQuantity,
-      extraDetail: normalizeOptionalText(query),
     })
 
     setError(null)
@@ -455,8 +441,8 @@ export function SourcingChat() {
         }),
       })
       if (!res.ok) {
-        const body = (await res.json().catch(() => ({}))) as { error?: string }
-        throw new Error(body.error ?? `Sourcing failed (${res.status})`)
+        const body = (await res.json().catch(() => ({}))) as unknown
+        throw new Error(extractApiErrorMessage(body) ?? `Sourcing failed (${res.status})`)
       }
       const data = (await res.json()) as SourcingResult
       setResult(data)
@@ -502,7 +488,7 @@ export function SourcingChat() {
 
   const persistWorkspaceSnapshot = (nextSelectedId?: string | null) => {
     saveWorkspaceState({
-      query,
+      query: "",
       hasSearched,
       selectedCategory,
       selectedProduct,
@@ -569,6 +555,24 @@ export function SourcingChat() {
           </SelectContent>
         </Select>
       </FilterBlock>
+
+      {selectedProduct && productVisual ? (
+        <FilterBlock label="Type">
+          <button
+            type="button"
+            onClick={() => {
+              resetSearchState()
+              setSelectedVariant(null)
+            }}
+            className="flex h-9 w-full items-center justify-between rounded-md border border-black/10 bg-[#f7f4ec] px-3 text-sm text-[#16201d]"
+          >
+            <span className={cn(!selectedVariant && "text-[#85918c]")}>
+              {selectedVariant ?? "Select a type from the preview cards"}
+            </span>
+            {selectedVariant ? <span className="text-xs font-semibold uppercase tracking-[0.14em] text-[#7a5b0f]">Clear</span> : null}
+          </button>
+        </FilterBlock>
+      ) : null}
 
       <FilterBlock label="Region">
         <Select
@@ -645,7 +649,6 @@ export function SourcingChat() {
           className="h-9 border-black/10 bg-[#f7f4ec] text-sm text-[#16201d] placeholder:text-[#85918c]"
         />
       </FilterBlock>
-
     </div>
   )
 
@@ -657,23 +660,6 @@ export function SourcingChat() {
             <form onSubmit={onSubmit} className="space-y-4">
               {filterPanel}
               <div className="space-y-3 border-t border-black/10 pt-4">
-                <Textarea
-                  value={query}
-                  onChange={(event) => {
-                    resetSearchState()
-                    setQuery(event.target.value)
-                  }}
-                  rows={3}
-                  disabled={status === "loading"}
-                  className="resize-none rounded-xl border-black/10 bg-[#fbf8f1] text-base leading-7 text-[#16201d] shadow-none placeholder:text-[#7f8a85] focus-visible:ring-[#d9b44a]"
-                  placeholder="Optional brief: add certification, packaging, delivery, or quality preferences."
-                />
-                {mismatchWarning && (
-                  <div className="flex items-start gap-3 rounded-xl border border-amber-400/30 bg-[#fff4d8] px-4 py-3 text-sm text-[#7a5b0f]">
-                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-                    <p>{mismatchWarning}</p>
-                  </div>
-                )}
                 <Button
                   disabled={status === "loading"}
                   className="h-12 rounded-lg bg-[#16201d] px-5 text-[#f7f4ec] hover:bg-[#24332f]"
@@ -681,9 +667,6 @@ export function SourcingChat() {
                   {status === "loading" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Search className="mr-2 h-4 w-4" />}
                   Find suppliers
                 </Button>
-                {status === "error" && error && (
-                  <div className="rounded-xl border border-red-400/30 bg-[#fff0ef] px-4 py-3 text-sm text-[#8a2e2b]">{error}</div>
-                )}
               </div>
             </form>
           </section>
@@ -721,26 +704,7 @@ export function SourcingChat() {
         <section className="space-y-4 rounded-2xl border border-black/10 bg-white/78 p-4 shadow-sm backdrop-blur-sm md:p-5">
           {filterPanel}
 
-          <form onSubmit={onSubmit} className="space-y-3 border-t border-black/10 pt-4">
-            <Textarea
-              value={query}
-              onChange={(event) => {
-                resetSearchState()
-                setQuery(event.target.value)
-              }}
-              rows={2}
-              disabled={status === "loading"}
-              className="resize-none rounded-xl border-black/10 bg-[#fbf8f1] text-base leading-7 text-[#16201d] shadow-none placeholder:text-[#7f8a85] focus-visible:ring-[#d9b44a]"
-              placeholder="Optional brief: add certification, packaging, delivery, or quality preferences."
-            />
-
-            {mismatchWarning && (
-              <div className="flex items-start gap-3 rounded-xl border border-amber-400/30 bg-[#fff4d8] px-4 py-3 text-sm text-[#7a5b0f]">
-                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-                <p>{mismatchWarning}</p>
-              </div>
-            )}
-
+          <form onSubmit={onSubmit} className="border-t border-black/10 pt-4">
             <div className="flex flex-wrap items-center gap-3">
               <Button
                 disabled={status === "loading"}
@@ -751,10 +715,6 @@ export function SourcingChat() {
               </Button>
             </div>
           </form>
-
-          {status === "error" && error && (
-            <div className="rounded-xl border border-red-400/30 bg-[#fff0ef] px-4 py-3 text-sm text-[#8a2e2b]">{error}</div>
-          )}
 
           <div className="hidden">
             {visibleRanked.map((item) => (
@@ -849,7 +809,9 @@ export function SourcingChat() {
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#6d7a75]">Ranked suppliers</p>
               <p className="mt-1 text-sm text-[#53605c]">
-                {displayedRanked.length > 0 ? "Click a supplier to open the decision profile." : "Run a search to rank suppliers."}
+                {displayedRanked.length > 0
+                  ? "Click a supplier to open the decision profile."
+                  : noAvailableSuppliersMessage ?? "Run a search to rank suppliers."}
               </p>
             </div>
             <Button asChild variant="outline" className="rounded-lg border-black/10 bg-transparent text-[#16201d] hover:bg-[#f1ede3] hover:text-[#16201d]">
@@ -930,6 +892,16 @@ export function SourcingChat() {
                   </div>
                 </div>
               ))}
+            </div>
+          ) : noAvailableSuppliersMessage ? (
+            <div className="rounded-2xl border border-[#d9b44a]/35 bg-[#fff8df] px-8 py-14 text-center shadow-sm">
+              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#7a5b0f]">No suppliers available</p>
+              <p className="mx-auto mt-4 max-w-xl text-xl font-semibold leading-8 text-[#16201d]">
+                {noAvailableSuppliersMessage}
+              </p>
+              <p className="mx-auto mt-3 max-w-lg text-sm leading-6 text-[#5d6965]">
+                Try again with a broader region, another country, or a different product to discover more sourcing options.
+              </p>
             </div>
           ) : selectedProduct && productVisual ? (
             <div className="overflow-hidden rounded-2xl border border-black/10 bg-white/78 shadow-sm">

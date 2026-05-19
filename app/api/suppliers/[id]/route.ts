@@ -9,9 +9,9 @@ export const runtime = "nodejs"
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params
+    const demo = findDemoSupplier(id)
 
     if (!hasServiceSupabaseEnv()) {
-      const demo = findDemoSupplier(id)
       if (!demo) return errorJson("NOT_FOUND", "Supplier not found.", 404)
       return okJson({ supplier: demo, source: "demo" })
     }
@@ -19,7 +19,10 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     const supabase = getAdminClient()
     const { data, error } = await supabase.from("suppliers").select("*").eq("id", id).maybeSingle()
     if (error) throw new Error(error.message)
-    if (!data) return errorJson("NOT_FOUND", "Supplier not found.", 404)
+    if (!data) {
+      if (demo) return okJson({ supplier: demo, source: "demo" })
+      return errorJson("NOT_FOUND", "Supplier not found.", 404)
+    }
     return okJson({ supplier: normalizeSupplier(data), source: "supabase" })
   } catch (err) {
     return handleApiError(err, "Supplier lookup failed.")

@@ -105,7 +105,11 @@ function applyBuyerFilters(suppliers: Supplier[], filters: BuyerFilters): Suppli
 function productMatches(supplier: Supplier, product?: string | null): boolean {
   const normalized = product?.trim().toLowerCase()
   if (!normalized) return false
-  return supplierSearchHaystack(supplier).includes(normalized)
+  return (
+    supplier.subcategory.toLowerCase() === normalized ||
+    supplier.products?.some((item) => item.toLowerCase().includes(normalized)) ||
+    supplierSearchHaystack(supplier).includes(normalized)
+  )
 }
 
 function hasDirectQueryMatch(supplier: Supplier, query: string, category: SupplierCategory | null): boolean {
@@ -136,8 +140,27 @@ function relevanceScore(supplier: Supplier, query: string, category: SupplierCat
   const juteScore = /\bjute\b/i.test(query) && haystack.includes("jute") ? 34 : 0
   const bagScore = /\b(bag|bags|tote|totes)\b/i.test(query) && /\b(bag|bags|tote|totes)\b/.test(haystack) ? 18 : 0
   const productScore = productMatches(supplier, filters.product) ? 80 : 0
+  const genericNamePenalty = /^(dhaka|hanoi|mumbai|jakarta|istanbul|karachi|lahore|noida|bengaluru|chattogram|chittagong|sylhet|jaipur|guangzhou|shenzhen|ho chi minh|ho chi minh city)\b/i.test(
+    supplier.name,
+  )
+    ? 18
+    : 0
 
-  return tokenScore + vectorScore + categoryScore + productScore + qualityScore + riskScore + leadScore + moqScore + orderQtyScore + bdScore + juteScore + bagScore
+  return (
+    tokenScore +
+    vectorScore +
+    categoryScore +
+    productScore +
+    qualityScore +
+    riskScore +
+    leadScore +
+    moqScore +
+    orderQtyScore +
+    bdScore +
+    juteScore +
+    bagScore -
+    genericNamePenalty
+  )
 }
 
 function rankSuppliersForQuery(
@@ -149,21 +172,42 @@ function rankSuppliersForQuery(
 ): Supplier[] {
   const unique = uniqueSuppliers(suppliers)
   const filteredUnique = applyBuyerFilters(unique, filters)
-  const productMatched = filteredUnique.filter((supplier) => productMatches(supplier, filters.product))
-  const directlyMatched = filteredUnique.filter((supplier) => hasDirectQueryMatch(supplier, query, category))
-  const primaryPool = productMatched.length >= Math.min(topK, 4) ? productMatched : directlyMatched
-  const pool = primaryPool.length > 0 ? primaryPool : filterByCategoryWithFallback(filteredUnique, category)
+  const relaxedPriceFilters: BuyerFilters = {
+    ...filters,
+    targetUnitPriceMin: null,
+    targetUnitPriceMax: null,
+  }
+  const relaxedFilteredUnique = applyBuyerFilters(unique, relaxedPriceFilters)
+  const categoryPool = filterByCategoryWithFallback(filteredUnique, category)
+  const relaxedCategoryPool = filterByCategoryWithFallback(relaxedFilteredUnique, category)
+  const productMatched = categoryPool.filter((supplier) => productMatches(supplier, filters.product))
+  const relaxedProductMatched = relaxedCategoryPool.filter((supplier) => productMatches(supplier, filters.product))
+  const directlyMatched = categoryPool.filter((supplier) => hasDirectQueryMatch(supplier, query, category))
+  const primaryPool =
+    productMatched.length >= Math.min(topK, 5)
+      ? productMatched
+      : relaxedProductMatched.length > 0
+        ? relaxedProductMatched
+        : directlyMatched.length > 0
+          ? directlyMatched
+          : categoryPool
+  const fallbackPool =
+    relaxedProductMatched.length > 0
+      ? relaxedCategoryPool
+      : productMatched.length > 0
+        ? categoryPool
+        : relaxedFilteredUnique
 
-  const rankedPrimary = pool
+  const rankedPrimary = primaryPool
     .map((supplier) => ({ supplier, score: relevanceScore(supplier, query, category, filters) }))
     .sort((a, b) => b.score - a.score || b.supplier.quality_rating - a.supplier.quality_rating)
     .slice(0, topK)
     .map(({ supplier, score }) => ({ ...supplier, retrieval_score: score / 100 }))
 
-  if (rankedPrimary.length >= Math.min(3, topK)) return rankedPrimary
+  if (rankedPrimary.length >= topK) return rankedPrimary
 
   const used = new Set(rankedPrimary.map((s) => s.id))
-  const filler = filteredUnique
+  const filler = fallbackPool
     .filter((supplier) => !used.has(supplier.id))
     .map((supplier) => ({ supplier, score: relevanceScore(supplier, query, category, filters) }))
     .sort((a, b) => b.score - a.score || b.supplier.quality_rating - a.supplier.quality_rating)
@@ -239,7 +283,7 @@ export async function retrieveCandidates(
   const category = categoryOverride ?? detectCategory(query)
 
   if (!hasServiceSupabaseEnv()) {
-    return { suppliers: applyBuyerFilters(getDemoSuppliers(query, topK, category), filters), mode: "deterministic" }
+    return { suppliers: applyBuyerFilters(getDemoSuppliers(query, Math.max(topK * 6, 60), category), filters).slice(0, topK), mode: "deterministic" }
   }
 
   let vectorSuppliers: Supplier[] = []
@@ -265,12 +309,13 @@ export async function retrieveCandidates(
     console.log("[sourcery] full-text retrieval fallback:", (err as Error).message)
   }
 
-  const ranked = rankSuppliersForQuery([...vectorSuppliers, ...fullTextSuppliers], query, category, topK, filters)
+  const demoSuppliers = getDemoSuppliers(query, Math.max(topK * 6, 60), category)
+  const ranked = rankSuppliersForQuery([...vectorSuppliers, ...fullTextSuppliers, ...demoSuppliers], query, category, topK, filters)
   if (ranked.length > 0) {
     return { suppliers: ranked, mode: vectorMode ? "vector" : "full_text" }
   }
 
-  return { suppliers: applyBuyerFilters(getDemoSuppliers(query, topK, category), filters), mode: "deterministic" }
+  return { suppliers: applyBuyerFilters(getDemoSuppliers(query, Math.max(topK * 6, 60), category), filters).slice(0, topK), mode: "deterministic" }
 }
 
 export function rescoreForBangladeshMode(suppliers: Supplier[], bangladeshMode: boolean, topK = 10): Supplier[] {

@@ -517,7 +517,11 @@ export async function runSourcingOrchestrator(args: {
     minQualityRating: args.minQualityRating,
   })
   if (retrieval.suppliers.length === 0) {
-    throw new Error("No supplier candidates are available. Seed Supabase first, then rerun the query.")
+    throw new ApiRequestError(
+      "NOT_FOUND",
+      "Sorry, there are no available suppliers for this product and filter combination at the moment.",
+      404,
+    )
   }
 
   const suppliers = rescoreForBangladeshMode(retrieval.suppliers, args.bangladeshMode, topK)

@@ -23,6 +23,8 @@ import { CurrencyValue } from "@/components/sourcery/currency-value"
 import { TermLabel } from "@/components/sourcery/term-help"
 import { formatMoney } from "@/lib/currency"
 import { getProductImage } from "@/lib/product-images"
+import { findDemoSupplier } from "@/lib/sourcery/demo-suppliers"
+import { enrichSupplierProfileFields } from "@/lib/sourcery/supplier-profile-enrichment"
 import { normalizeSupplier } from "@/lib/sourcery/supplier-normalizer"
 import { getAdminClient, isAdminSupabaseConfigured } from "@/lib/supabase/admin"
 
@@ -127,30 +129,88 @@ function preferredChannel(row: Record<string, unknown>) {
   return { label: "Website contact first", detail: "Use the public supplier website form or sourcing desk." }
 }
 
-export default async function SupplierDecisionPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params
+type SupplierDecisionData = {
+  supplier: ReturnType<typeof normalizeSupplier>
+  metadata: { port?: string; sample_days?: number; incoterms?: string[] }
+  paymentTerms: string
+  website: string | null
+  contactName: string
+  email: string | null
+  phone: string | null
+  contactRow: Record<string, unknown>
+}
 
-  if (!isAdminSupabaseConfigured()) notFound()
+async function loadSupplierDecisionData(id: string): Promise<SupplierDecisionData | null> {
+  const demo = findDemoSupplier(id)
+
+  if (!isAdminSupabaseConfigured()) {
+    if (!demo) return null
+    const enriched = enrichSupplierProfileFields({ supplier: demo })
+    return {
+      supplier: demo,
+      metadata: enriched.metadata,
+      paymentTerms: enriched.paymentTerms,
+      website: demo.source_url ?? null,
+      contactName: "Sourcing desk",
+      email: null,
+      phone: null,
+      contactRow: {},
+    }
+  }
 
   const supabase = getAdminClient()
   const { data, error } = await supabase.from("suppliers").select("*").eq("id", id).maybeSingle()
-  if (error || !data) notFound()
+  if (error) throw new Error(error.message)
+
+  if (!data) {
+    if (!demo) return null
+    const enriched = enrichSupplierProfileFields({ supplier: demo })
+    return {
+      supplier: demo,
+      metadata: enriched.metadata,
+      paymentTerms: enriched.paymentTerms,
+      website: demo.source_url ?? null,
+      contactName: "Sourcing desk",
+      email: null,
+      phone: null,
+      contactRow: {},
+    }
+  }
 
   const supplier = normalizeSupplier(data)
+  const enriched = enrichSupplierProfileFields({
+    supplier,
+    metadata: (data.metadata ?? {}) as SupplierDecisionData["metadata"],
+    paymentTerms: typeof data.payment_terms === "string" ? data.payment_terms : null,
+  })
+
+  return {
+    supplier,
+    metadata: enriched.metadata,
+    paymentTerms: enriched.paymentTerms,
+    website: typeof data.website === "string" && data.website.startsWith("http") ? data.website : supplier.source_url,
+    contactName: typeof data.contact_name === "string" ? data.contact_name : "Sourcing desk",
+    email: typeof data.email === "string" ? data.email : null,
+    phone: typeof data.phone === "string" ? data.phone : null,
+    contactRow: data as Record<string, unknown>,
+  }
+}
+
+export default async function SupplierDecisionPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params
+
+  const decisionData = await loadSupplierDecisionData(id)
+  if (!decisionData) notFound()
+
+  const { supplier, metadata, paymentTerms, website, contactName, email, phone, contactRow } = decisionData
   const image = getProductImage({ supplier })
-  const metadata = (data.metadata ?? {}) as { port?: string; sample_days?: number; incoterms?: string[] }
-  const paymentTerms = typeof data.payment_terms === "string" ? data.payment_terms : "Quoted during outreach"
-  const website = typeof data.website === "string" && data.website.startsWith("http") ? data.website : supplier.source_url
-  const contactName = typeof data.contact_name === "string" ? data.contact_name : "Sourcing desk"
-  const email = typeof data.email === "string" ? data.email : null
-  const phone = typeof data.phone === "string" ? data.phone : null
   const incoterms = Array.isArray(metadata.incoterms) ? metadata.incoterms.map(String) : []
   const product = supplier.products?.[0] ?? supplier.subcategory
   const recommendation = supplierRecommendation(supplier)
   const initialOrderUnits = Math.max(supplier.moq, Math.min(supplier.moq * 2, 1500))
   const initialSpend = supplier.unit_price_usd * initialOrderUnits
   const reorderWindow = supplier.lead_time_days + 14
-  const channel = preferredChannel(data as Record<string, unknown>)
+  const channel = preferredChannel(contactRow)
 
   return (
     <div className="space-y-6">
@@ -221,8 +281,8 @@ export default async function SupplierDecisionPage({ params }: { params: Promise
               <InfoTile label="Contact owner" value={contactName} />
               <InfoTile label="Payment terms" value={paymentTerms} />
               <InfoTile label="Shipping terms" value={incoterms.length > 0 ? incoterms.join(", ") : "To be confirmed"} />
-              <InfoTile label="Port" value={metadata.port ?? "Not listed"} />
-              <InfoTile label="Sample time" value={typeof metadata.sample_days === "number" ? `${metadata.sample_days} days` : "Not listed"} />
+              <InfoTile label="Port" value={metadata.port ?? "Main export port"} />
+              <InfoTile label="Sample time" value={typeof metadata.sample_days === "number" ? `${metadata.sample_days} days` : "7 days"} />
             </div>
 
             <div className="mt-4 flex flex-wrap gap-2">

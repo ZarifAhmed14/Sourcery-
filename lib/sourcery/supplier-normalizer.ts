@@ -7,6 +7,7 @@ type SupplierDbRow = Record<string, unknown> & {
 
 const CATEGORY_ALIASES: Record<string, SupplierCategory> = {
   apparel: "apparel",
+  "apparel ": "apparel",
   clothing: "apparel",
   garment: "apparel",
   garments: "apparel",
@@ -15,10 +16,17 @@ const CATEGORY_ALIASES: Record<string, SupplierCategory> = {
   cosmetic: "beauty",
   skincare: "beauty",
   home: "home",
+  "bags & accessories": "accessories",
+  "bag & accessories": "accessories",
+  bags: "accessories",
+  bag: "accessories",
   "home goods": "home",
   "home textiles": "home",
   food: "food",
   foods: "food",
+  "food & beverage": "food",
+  beverage: "food",
+  beverages: "food",
   tea: "food",
   spices: "food",
   packaging: "packaging",
@@ -89,6 +97,66 @@ function deriveSubcategory(row: SupplierDbRow, products: string[]): string {
   return products[0] ?? normalizeCategory(row.category)
 }
 
+function normalizeSupplierName(value: unknown): string {
+  const raw = asString(value, "Unnamed supplier")
+    .replace(/\s+/g, " ")
+    .trim()
+
+  return raw
+    .replace(/\bCo\.?\s+Co\.?\b/gi, "Co.")
+    .replace(/\bLtd\.?\s+Ltd\.?\b/gi, "Ltd.")
+    .replace(/\bGroup\s+Group\b/gi, "Group")
+    .replace(/\bIndustries\s+Industries\b/gi, "Industries")
+    .replace(/\s+,/g, ",")
+}
+
+function normalizeMoq(value: unknown, category: SupplierCategory): number {
+  const explicit = asNumber(value, NaN)
+  const defaults: Record<SupplierCategory, number> = {
+    accessories: 600,
+    apparel: 1200,
+    beauty: 1000,
+    electronics: 500,
+    food: 800,
+    footwear: 900,
+    home: 500,
+    industrial: 300,
+    packaging: 3000,
+    textiles: 1200,
+  }
+  const maxByCategory: Record<SupplierCategory, number> = {
+    accessories: 2500,
+    apparel: 3500,
+    beauty: 3000,
+    electronics: 2000,
+    food: 2500,
+    footwear: 2500,
+    home: 1800,
+    industrial: 1500,
+    packaging: 5000,
+    textiles: 4000,
+  }
+  const stepByCategory: Record<SupplierCategory, number> = {
+    accessories: 50,
+    apparel: 100,
+    beauty: 100,
+    electronics: 50,
+    food: 100,
+    footwear: 100,
+    home: 50,
+    industrial: 50,
+    packaging: 250,
+    textiles: 100,
+  }
+
+  const fallback = defaults[category]
+  if (!Number.isFinite(explicit) || explicit <= 0) return fallback
+
+  const capped = Math.max(fallback, Math.min(explicit, maxByCategory[category]))
+  const step = stepByCategory[category]
+  return Math.round(capped / step) * step
+}
+
 function deriveOnTimeRate(row: SupplierDbRow, riskScore: number): number {
   const explicit = asNumber(row.on_time_rate, NaN)
   if (Number.isFinite(explicit)) return Math.max(0, Math.min(100, explicit))
@@ -103,6 +171,7 @@ function deriveQualityRating(row: SupplierDbRow): number {
 
 export function normalizeSupplier(row: SupplierDbRow): Supplier {
   const products = asStringArray(row.products)
+  const category = normalizeCategory(row.category)
   const riskScore = asNumber(row.risk_score, 50)
   const qualityRating = deriveQualityRating(row)
   const rating = asNumber(row.rating, qualityRating)
@@ -110,16 +179,16 @@ export function normalizeSupplier(row: SupplierDbRow): Supplier {
 
   return {
     id: asString(row.id) || asString(row.supplier_id),
-    name: asString(row.name, "Unnamed supplier"),
+    name: normalizeSupplierName(row.name),
     country: asString(row.country, "Unknown"),
     city: asString(row.city, "Unknown"),
     region: normalizeRegion(row.region),
-    category: normalizeCategory(row.category),
+    category,
     subcategory: deriveSubcategory(row, products),
     products,
     description: asString(row.description, "Supplier profile"),
     unit_price_usd: asNumber(row.unit_price_usd, 0),
-    moq: asNumber(row.moq, 1),
+    moq: normalizeMoq(row.moq, category),
     lead_time_days: asNumber(row.lead_time_days, 1),
     rating,
     on_time_rate: deriveOnTimeRate(row, riskScore),
@@ -144,6 +213,7 @@ export function supplierSearchHaystack(supplier: Supplier): string {
     supplier.region,
     supplier.category,
     supplier.subcategory,
+    supplier.products?.join(" ") ?? "",
     supplier.description,
     supplier.certifications.join(" "),
     supplier.risk_notes ?? "",

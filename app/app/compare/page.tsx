@@ -105,8 +105,16 @@ export default function ComparePage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-start">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <BackNavButton fallbackHref={backTarget} label={supplierId ? "Back to supplier profile" : "Back to workspace"} />
+        {supplierId && result ? (
+          <Button asChild variant="outline" className="rounded-md border-black/10 bg-transparent text-[#16201d] hover:bg-[#f1ede3]">
+            <Link href="/app/compare">
+              <GitCompare className="mr-1.5 h-4 w-4" />
+              Compare with other suppliers
+            </Link>
+          </Button>
+        ) : null}
       </div>
 
       <section className="rounded-2xl border border-black/10 bg-white/78 p-7 text-[#16201d] shadow-sm md:p-8">
