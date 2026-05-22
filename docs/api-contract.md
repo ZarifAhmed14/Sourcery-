@@ -1,6 +1,6 @@
-# Sourcery API Contract
+﻿# Sourcery API Contract
 
-This contract is for the Lovable frontend. Use relative URLs such as `/api/source`; do not call Supabase or AI providers directly from the browser.
+This contract is for the frontend. Use relative URLs such as `/api/source`; do not call Supabase or model providers directly from the browser.
 
 ## POST /api/source
 
@@ -32,11 +32,19 @@ type SourcingResult = {
     query: string
     retrieval_mode: "vector" | "full_text" | "deterministic"
     llm_mode: "ai" | "deterministic_fallback"
-    ai_provider: "ai_sdk" | "pollinations" | "none"
+    ai_provider: "ai_sdk" | "groq" | "gemini" | "pollinations" | "none"
+    result_mode: "ai_ranked" | "rules_ranked"
+    result_quality: "high_confidence" | "rules_based_fallback" | "limited_supplier_pool" | "standard"
+    ranking_version: string
     elapsed_ms: number
   }
 }
 ```
+
+Notes:
+- The ranking contract is intentionally light.
+- The model decides ranking order and short reasoning.
+- Numeric comparison and risk structures are computed server-side from supplier data.
 
 ## GET /api/suppliers
 
@@ -99,7 +107,7 @@ Response:
   message: string
   meta: {
     llm_mode: "ai" | "deterministic_fallback"
-    ai_provider: "ai_sdk" | "pollinations" | "none"
+    ai_provider: "ai_sdk" | "groq" | "gemini" | "pollinations" | "none"
   }
 }
 ```
@@ -142,15 +150,23 @@ Returns non-secret backend status for debugging:
     supabase: boolean
     serviceRole: boolean
     aiGeneration: boolean
-    aiGenerationProvider: "ai_sdk" | "pollinations" | "none"
+    aiGenerationProvider: "ai_sdk" | "groq" | "gemini" | "pollinations" | "none"
     embeddings: boolean
     embeddingProvider: "openai" | "local_hash"
     reasoningModel: string
     embeddingModel: string
-    freeProvider: "pollinations" | "none"
+    freeProvider: "groq" | "gemini" | "pollinations" | "none"
     pollinationsModel: string | null
+    geminiModel: string | null
+    groqModel: string | null
   }
 }
 ```
 
-When paid AI keys are missing, the backend can use the free Pollinations text endpoint for lightweight demo generation. Structured sourcing defaults to vector retrieval plus deterministic ranking unless `AI_ENABLE_FREE_SOURCE_AI=1`, because the anonymous free endpoint is queue-limited. Frontend code should surface `meta.retrieval_mode`, `meta.llm_mode`, `meta.ai_provider`, and list/detail `source` fields when building debug or judge-demo views.
+Frontend trust/debug views should surface:
+- `meta.result_mode`
+- `meta.result_quality`
+- `meta.retrieval_mode`
+- `meta.llm_mode`
+- `meta.ai_provider`
+- list/detail `source`

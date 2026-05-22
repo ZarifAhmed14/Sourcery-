@@ -2,12 +2,16 @@ import { generateText, Output } from "ai"
 import type { ZodType } from "zod"
 import {
   getAiGenerationProvider,
+  getBargainAiProvider,
   getBargainModel,
   getGeminiApiKey,
   getGeminiModel,
+  getGroqApiKey,
+  getGroqModel,
   getPollinationsBaseUrl,
   getPollinationsModel,
   getReasoningModel,
+  getSourceAiProvider,
 } from "@/lib/env"
 
 type PollinationsMessage = {
@@ -30,7 +34,7 @@ type PollinationsChatResponse = {
   }
 }
 
-export type AiGenerationProvider = "ai_sdk" | "gemini" | "pollinations" | "none"
+export type AiGenerationProvider = "ai_sdk" | "groq" | "gemini" | "pollinations" | "none"
 
 export type StructuredGenerationResult<T> = {
   output: T
@@ -196,13 +200,75 @@ async function callGemini(args: {
   return text
 }
 
+async function callGroq(args: {
+  system?: string
+  prompt: string
+  maxTokens: number
+  responseFormat?:
+    | {
+        type: "json_object"
+      }
+    | {
+        type: "json_schema"
+        json_schema: {
+          name: string
+          strict?: boolean
+          schema: Record<string, unknown>
+        }
+      }
+}): Promise<string> {
+  const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${getGroqApiKey()}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: getGroqModel(),
+      messages: [
+        ...(args.system ? [{ role: "system", content: args.system }] : []),
+        { role: "user", content: args.prompt },
+      ],
+      temperature: 0.2,
+      max_tokens: args.maxTokens,
+      response_format: args.responseFormat,
+    }),
+  })
+
+  const rawBody = await response.text()
+  let body: {
+    choices?: Array<{ message?: { content?: string } }>
+    error?: { message?: string }
+  }
+
+  try {
+    body = JSON.parse(rawBody)
+  } catch {
+    throw new Error(`Groq returned non-JSON response: ${rawBody.slice(0, 240)}`)
+  }
+
+  if (!response.ok) {
+    throw new Error(body.error?.message ?? `Groq request failed (${response.status})`)
+  }
+
+  const text = body.choices?.[0]?.message?.content?.trim()
+  if (!text) throw new Error("Groq returned no text")
+  return text
+}
+
 export async function generateStructuredObject<T>(args: {
   schema: ZodType<T>
   system: string
   prompt: string
   maxOutputTokens: number
+  providerOverride?: AiGenerationProvider
+  jsonSchema?: {
+    name: string
+    strict?: boolean
+    schema: Record<string, unknown>
+  }
 }): Promise<StructuredGenerationResult<T>> {
-  const provider = getAiGenerationProvider()
+  const provider = args.providerOverride ?? getSourceAiProvider()
 
   if (provider === "none") {
     throw new Error("AI generation provider is disabled")
@@ -226,6 +292,40 @@ export async function generateStructuredObject<T>(args: {
       prompt: args.prompt,
       maxTokens: args.maxOutputTokens,
       jsonMode: true,
+    })
+    try {
+      return { output: parseStructuredResponse(args.schema, text), provider }
+    } catch (err) {
+      const repairedText = await callGemini({
+        system: `${args.system}\n\nRepair invalid JSON into one valid JSON object only. Do not add markdown or commentary.`,
+        prompt: [
+          "The previous response failed JSON parsing or schema validation.",
+          `Validation error: ${(err as Error).message}`,
+          "Repair this response into one valid JSON object that follows the requested schema exactly:",
+          text,
+        ].join("\n\n"),
+        maxTokens: args.maxOutputTokens,
+        jsonMode: true,
+      })
+      return { output: parseStructuredResponse(args.schema, repairedText), provider }
+    }
+  }
+
+  if (provider === "groq") {
+    const text = await callGroq({
+      system: `${args.system}\n\nReturn strict JSON only. Do not include markdown, prose, comments, or code fences.`,
+      prompt: args.prompt,
+      maxTokens: args.maxOutputTokens,
+      responseFormat: args.jsonSchema
+        ? {
+            type: "json_schema",
+            json_schema: {
+              name: args.jsonSchema.name,
+              strict: args.jsonSchema.strict ?? true,
+              schema: args.jsonSchema.schema,
+            },
+          }
+        : { type: "json_object" },
     })
     return { output: parseStructuredResponse(args.schema, text), provider }
   }
@@ -270,8 +370,9 @@ export async function generateStructuredObject<T>(args: {
 export async function generatePlainText(args: {
   prompt: string
   maxOutputTokens: number
+  providerOverride?: AiGenerationProvider
 }): Promise<TextGenerationResult> {
-  const provider = getAiGenerationProvider()
+  const provider = args.providerOverride ?? getBargainAiProvider()
   if (provider === "none") throw new Error("AI generation provider is disabled")
 
   if (provider === "ai_sdk") {
@@ -285,6 +386,14 @@ export async function generatePlainText(args: {
 
   if (provider === "gemini") {
     const text = await callGemini({
+      prompt: args.prompt,
+      maxTokens: args.maxOutputTokens,
+    })
+    return { text: text.trim(), provider }
+  }
+
+  if (provider === "groq") {
+    const text = await callGroq({
       prompt: args.prompt,
       maxTokens: args.maxOutputTokens,
     })

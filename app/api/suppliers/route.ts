@@ -4,7 +4,6 @@ import { hasServiceSupabaseEnv } from "@/lib/env"
 import { listDemoSuppliers } from "@/lib/sourcery/demo-suppliers"
 import { getAdminClient } from "@/lib/supabase/admin"
 import { normalizeSupplier, supplierSearchHaystack } from "@/lib/sourcery/supplier-normalizer"
-import type { Supplier } from "@/lib/types"
 
 export const runtime = "nodejs"
 
@@ -14,9 +13,13 @@ export async function GET(req: Request) {
     const input = parseJson(SupplierListRequestSchema, Object.fromEntries(url.searchParams.entries()))
     const limit = input.limit ?? 50
     const offset = input.offset ?? 0
+    const demo = listDemoSuppliers({ ...input, limit, offset })
+
+    if (demo.count > 0) {
+      return okJson({ ...demo, limit, offset, source: "demo" })
+    }
 
     if (!hasServiceSupabaseEnv()) {
-      const demo = listDemoSuppliers({ ...input, limit, offset })
       return okJson({ ...demo, limit, offset, source: "demo" })
     }
 
@@ -53,12 +56,9 @@ export async function GET(req: Request) {
       }
     }
 
-    const demo = listDemoSuppliers({ ...input, limit: 2500, offset: 0 })
-    const merged = dedupeSuppliers([...suppliers, ...demo.suppliers])
-
     return okJson({
-      suppliers: merged.slice(offset, offset + limit),
-      count: input.q || input.category ? merged.length : Math.max(count ?? suppliers.length, merged.length),
+      suppliers: suppliers.slice(offset, offset + limit),
+      count: input.q || input.category ? suppliers.length : count ?? suppliers.length,
       limit,
       offset,
       source: "supabase",
@@ -66,16 +66,4 @@ export async function GET(req: Request) {
   } catch (err) {
     return handleApiError(err, "Supplier list failed.")
   }
-}
-
-function dedupeSuppliers(suppliers: Supplier[]): Supplier[] {
-  const byId = new Map<string, Supplier>()
-  const byName = new Set<string>()
-  for (const supplier of suppliers) {
-    const nameKey = supplier.name.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()
-    if (byId.has(supplier.id) || byName.has(nameKey)) continue
-    byId.set(supplier.id, supplier)
-    if (nameKey) byName.add(nameKey)
-  }
-  return [...byId.values()]
 }

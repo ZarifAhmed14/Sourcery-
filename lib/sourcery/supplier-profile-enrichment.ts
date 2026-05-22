@@ -6,6 +6,17 @@ type SupplierMetadata = {
   incoterms?: string[]
 }
 
+export type SupplierLogisticsLane = {
+  mode: "ship" | "air" | "road"
+  modeLabel: string
+  routeLabel: string
+  originLabel: string
+  destinationLabel: string
+  destinationDetail: string
+  etaLabel: string
+  rationale: string
+}
+
 type SupplierProfileFields = {
   monthlyCapacity: number | null
   paymentTerms: string
@@ -30,6 +41,24 @@ const DEFAULT_PORT_BY_COUNTRY: Record<string, string> = {
   indonesia: "Tanjung Priok",
 }
 
+const DEFAULT_AIRPORT_BY_COUNTRY: Record<string, string> = {
+  bangladesh: "Dhaka Hazrat Shahjalal Airport",
+  china: "Shenzhen Bao'an Airport",
+  india: "Mumbai Airport",
+  vietnam: "Tan Son Nhat Airport",
+  turkey: "Istanbul Airport",
+  morocco: "Mohammed V Airport",
+  egypt: "Cairo International Airport",
+  brazil: "Sao Paulo Guarulhos Airport",
+  colombia: "Jose Maria Cordova Airport",
+  mexico: "Monterrey Airport",
+  "united states": "Los Angeles International Airport",
+  portugal: "Porto Airport",
+  poland: "Warsaw Chopin Airport",
+  pakistan: "Jinnah International Airport",
+  indonesia: "Soekarno-Hatta Airport",
+}
+
 const PORT_BY_CITY: Record<string, string> = {
   dhaka: "Chattogram",
   chattogram: "Chattogram",
@@ -51,6 +80,29 @@ const PORT_BY_CITY: Record<string, string> = {
   medellin: "Cartagena",
   monterrey: "Laredo",
   los: "Long Beach",
+}
+
+const AIRPORT_BY_CITY: Record<string, string> = {
+  dhaka: "Dhaka Hazrat Shahjalal Airport",
+  chattogram: "Chattogram Shah Amanat Airport",
+  chittagong: "Chattogram Shah Amanat Airport",
+  narayanganj: "Dhaka Hazrat Shahjalal Airport",
+  ho: "Tan Son Nhat Airport",
+  hanoi: "Noi Bai Airport",
+  guangzhou: "Guangzhou Baiyun Airport",
+  shenzhen: "Shenzhen Bao'an Airport",
+  foshan: "Guangzhou Baiyun Airport",
+  mumbai: "Mumbai Airport",
+  tiruppur: "Coimbatore Airport",
+  istanbul: "Istanbul Airport",
+  izmir: "Izmir Adnan Menderes Airport",
+  tangier: "Tangier Ibn Battuta Airport",
+  casablanca: "Mohammed V Airport",
+  cairo: "Cairo International Airport",
+  sao: "Sao Paulo Guarulhos Airport",
+  medellin: "Jose Maria Cordova Airport",
+  monterrey: "Monterrey Airport",
+  los: "Los Angeles International Airport",
 }
 
 const SAMPLE_DAYS_BY_CATEGORY: Partial<Record<Supplier["category"], number>> = {
@@ -126,6 +178,88 @@ function inferSampleDays(supplier: Supplier): number {
 
 function inferIncoterms(supplier: Supplier): string[] {
   return INCOTERMS_BY_CATEGORY[supplier.category] ?? ["FOB", "EXW"]
+}
+
+function inferAirport(supplier: Supplier): string {
+  const cityKey = normalizeKey(supplier.city).split(/[^a-z]+/)[0] ?? ""
+  const countryKey = normalizeKey(supplier.country)
+  return AIRPORT_BY_CITY[cityKey] ?? DEFAULT_AIRPORT_BY_COUNTRY[countryKey] ?? "Main cargo airport"
+}
+
+function inferSeaEta(supplier: Supplier): string {
+  const totalDays = Math.max(18, Math.round(supplier.lead_time_days * 0.45))
+  return `${totalDays}-${totalDays + 7} days`
+}
+
+function inferAirEta(supplier: Supplier): string {
+  const totalDays = Math.max(3, Math.round(supplier.lead_time_days * 0.18))
+  return `${totalDays}-${totalDays + 3} days`
+}
+
+function inferRoadEta(supplier: Supplier): string {
+  if (normalizeKey(supplier.country) === "bangladesh") return "1-3 days"
+  return "4-8 days"
+}
+
+export function inferSupplierLogisticsLane(args: {
+  supplier: Supplier
+  metadata?: SupplierMetadata | null
+}): SupplierLogisticsLane {
+  const { supplier } = args
+  const metadata = args.metadata ?? {}
+  const port = typeof metadata.port === "string" && metadata.port.trim() ? metadata.port.trim() : inferPort(supplier)
+  const airport = inferAirport(supplier)
+  const countryKey = normalizeKey(supplier.country)
+
+  if (countryKey === "bangladesh") {
+    return {
+      mode: "road",
+      modeLabel: "By road",
+      routeLabel: "Domestic truck dispatch",
+      originLabel: `${supplier.city} factory dispatch`,
+      destinationLabel: "Dhaka buyer warehouse",
+      destinationDetail: "Best for local Bangladesh fulfillment and short replenishment runs.",
+      etaLabel: inferRoadEta(supplier),
+      rationale: "This supplier is already inside Bangladesh, so direct trucking is the cleanest and most realistic route.",
+    }
+  }
+
+  if (countryKey === "india") {
+    return {
+      mode: "road",
+      modeLabel: "By road",
+      routeLabel: "Cross-border land corridor",
+      originLabel: `${supplier.city} consolidation hub`,
+      destinationLabel: "Benapole land port to Dhaka",
+      destinationDetail: "Works best for nearby India-to-Bangladesh replenishment when shipment size stays manageable.",
+      etaLabel: inferRoadEta(supplier),
+      rationale: "The supplier is close enough to Bangladesh for practical cross-border trucking on selected order sizes.",
+    }
+  }
+
+  if (supplier.lead_time_days <= 18 || supplier.moq <= 400 || supplier.unit_price_usd >= 12) {
+    return {
+      mode: "air",
+      modeLabel: "By plane",
+      routeLabel: "Urgent air cargo lane",
+      originLabel: airport,
+      destinationLabel: "Dhaka Hazrat Shahjalal Airport",
+      destinationDetail: "Best for urgent samples, tighter launch windows, or higher-value goods.",
+      etaLabel: inferAirEta(supplier),
+      rationale: "Air freight is the better fit here because speed or product value matters more than pure freight savings.",
+    }
+  }
+
+  return {
+    mode: "ship",
+    modeLabel: "By ship",
+    routeLabel: "Sea freight export lane",
+    originLabel: `${port} Port`,
+    destinationLabel: "Chattogram Port",
+    destinationDetail: "Best for margin protection on repeat orders and heavier shipment volumes.",
+    etaLabel: inferSeaEta(supplier),
+    rationale: "Sea freight is the most realistic lane for this supplier once order volume and landed-cost discipline matter.",
+  }
 }
 
 function sanitizeIncoterms(value: unknown): string[] {

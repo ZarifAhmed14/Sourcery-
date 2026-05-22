@@ -12,10 +12,13 @@
     "db:seed:rich": "node scripts/upsert-rich-suppliers.mjs",
     "db:seed:expanded": "python scripts/build_expanded_supplier_datasets.py --upsert",
     "db:dataset:expanded": "python scripts/build_expanded_supplier_datasets.py",
+    "dataset:clean": "python scripts/clean_supplier_dataset.py",
+    "dataset:qa": "node scripts/qa-supplier-dataset.mjs",
     "db:embed": "node scripts/embed-suppliers.mjs",
     "db:verify:public": "node scripts/verify-supabase-public.mjs",
     "db:verify": "node scripts/verify-supabase.mjs",
     "smoke:api": "node scripts/smoke-api.mjs",
+    "source:regression": "node scripts/source-regression.mjs",
     "self-check": "npm run typecheck && npm run build && npm run smoke:api"
   },
   "dependencies": {

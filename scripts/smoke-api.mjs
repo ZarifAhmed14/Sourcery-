@@ -40,6 +40,33 @@ async function waitForHealth() {
   throw new Error(`Health endpoint did not become ready at ${baseUrl}`)
 }
 
+async function buildForSmoke() {
+  const nextBin = path.join(process.cwd(), "node_modules", "next", "dist", "bin", "next")
+  await new Promise((resolve, reject) => {
+    const build = spawn(process.execPath, [nextBin, "build"], {
+      cwd: process.cwd(),
+      env: process.env,
+      stdio: ["ignore", "pipe", "pipe"],
+      windowsHide: true,
+    })
+
+    let buildOutput = ""
+    build.stdout.on("data", (chunk) => {
+      buildOutput += chunk.toString()
+    })
+    build.stderr.on("data", (chunk) => {
+      buildOutput += chunk.toString()
+    })
+    build.on("exit", (code) => {
+      if (code === 0) {
+        resolve(undefined)
+        return
+      }
+      reject(new Error(`next build failed with code ${code ?? "unknown"}\n${buildOutput}`))
+    })
+  })
+}
+
 function startServer() {
   const nextBin = path.join(process.cwd(), "node_modules", "next", "dist", "bin", "next")
   server = spawn(process.execPath, [nextBin, "start", "-p", String(port)], {
@@ -63,7 +90,10 @@ function startServer() {
 }
 
 async function main() {
-  if (!providedBaseUrl) startServer()
+  if (!providedBaseUrl) {
+    await buildForSmoke()
+    startServer()
+  }
 
   const health = await waitForHealth()
   const supplierList = await request("/api/suppliers?limit=3&q=jute")

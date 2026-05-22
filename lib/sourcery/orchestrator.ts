@@ -1,25 +1,14 @@
-import { createHash, randomUUID } from "node:crypto"
+﻿import { createHash, randomUUID } from "node:crypto"
 import { z } from "zod"
-import {
-  CombinedAgentOutputSchema,
-  ComparisonItemSchema,
-  DiscoveryItemSchema,
-  RiskItemSchema,
-  type CombinedAgentOutput,
-  type ComparisonItem,
-  type DiscoveryItem,
-  type RiskItem,
-} from "@/lib/schemas"
-import { getAiGenerationProvider, isFreeSourceAiEnabled } from "@/lib/env"
 import { generateStructuredObject, type AiGenerationProvider } from "@/lib/ai/generation"
-import { ORCHESTRATOR_SYSTEM, BANGLADESH_MODE_PROMPT } from "@/lib/prompts/system"
-import { fallbackExplanation, validateExplainability } from "@/lib/guardrail"
+import { ApiRequestError } from "@/lib/backend/http"
+import { getSourceAiProvider, isFreeSourceAiEnabled } from "@/lib/env"
 import { buildCacheKey, getCached, setCached } from "@/lib/sourcery/cache"
 import { detectCategory, retrieveCandidates, rescoreForBangladeshMode, type RetrievalMode } from "@/lib/sourcery/retrieval"
-import { recordSourceEvent } from "@/lib/sourcery/telemetry"
 import { isSupportedProduct, supportedProductHelpText } from "@/lib/sourcery/supported-products"
+import { recordSourceEvent } from "@/lib/sourcery/telemetry"
+import { BANGLADESH_MODE_PROMPT } from "@/lib/prompts/system"
 import type { ApiMeta, Supplier, SupplierCategory, SupplierRegion } from "@/lib/types"
-import { ApiRequestError } from "@/lib/backend/http"
 
 export type SourcingResult = {
   suppliers: Supplier[]
@@ -34,13 +23,87 @@ export type SourcingResult = {
   }
 }
 
-const SingleSupplierAgentOutputSchema = z.object({
-  discovery: DiscoveryItemSchema,
-  risk: RiskItemSchema,
-  comparison: ComparisonItemSchema,
+type DiscoveryItem = {
+  supplier_id: string
+  rank: number
+  fit_score: number
+  explanation: string
+  key_factors: string[]
+  confidence: "high" | "medium" | "low"
+  confidence_reason: string
+}
+
+type RiskItem = {
+  supplier_id: string
+  risk_flags: string[]
+  bd_mode_adjusted: boolean
+  explanation: string
+  key_factors: string[]
+  confidence: "high" | "medium" | "low"
+  confidence_reason: string
+}
+
+type ComparisonItem = {
+  supplier_id: string
+  scorecard: {
+    price: number
+    lead_time_days: number
+    moq: number
+    on_time_rate: number
+    quality_rating: number
+  }
+  explanation: string
+  key_factors: string[]
+  confidence: "high" | "medium" | "low"
+  confidence_reason: string
+}
+
+type CombinedAgentOutput = {
+  discovery: DiscoveryItem[]
+  risk: RiskItem[]
+  comparison: ComparisonItem[]
+}
+
+const RANKING_VERSION = "v2-lite"
+
+const LiteRankingItemSchema = z.object({
+  supplier_id: z.string().min(2),
+  rank: z.number().int().min(1).max(10),
+  fit_summary: z.string().min(12).max(220),
+  watchout: z.string().min(8).max(180),
 })
 
-type SingleSupplierAgentOutput = z.infer<typeof SingleSupplierAgentOutputSchema>
+const LiteRankingResponseSchema = z.object({
+  rankings: z.array(LiteRankingItemSchema).min(1).max(10),
+})
+
+type LiteRankingResponse = z.infer<typeof LiteRankingResponseSchema>
+
+const LITE_RANKING_JSON_SCHEMA = {
+  name: "sourcery_ranking_lite",
+  strict: true,
+  schema: {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      rankings: {
+        type: "array",
+        items: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            supplier_id: { type: "string" },
+            rank: { type: "integer" },
+            fit_summary: { type: "string" },
+            watchout: { type: "string" },
+          },
+          required: ["supplier_id", "rank", "fit_summary", "watchout"],
+        },
+      },
+    },
+    required: ["rankings"],
+  },
+} as const
 
 const UNSUPPORTED_DEMO_QUERY =
   /\b(electronic|electronics|sensor|sensors|module|modules|pcb|bluetooth|smart device|charger|earbud|power bank|adapter)\b/i
@@ -67,63 +130,6 @@ function leanSupplier(supplier: Supplier) {
   }
 }
 
-function responseShape(candidates: Supplier[]): string {
-  return `JSON_RESPONSE_SHAPE:
-{
-  "discovery": [
-    {
-      "supplier_id": "<uuid from candidate list>",
-      "rank": 1,
-      "fit_score": 75,
-      "explanation": "Selected for 96% on-time rate and 24-day lead time.",
-      "key_factors": ["on_time_rate: 96%", "lead_time: 24 days"],
-      "confidence": "high",
-      "confidence_reason": "Strong match across 4 supplier signals."
-    }
-  ],
-  "risk": [
-    {
-      "supplier_id": "<uuid from candidate list>",
-      "risk_flags": ["MOQ is 500 units"],
-      "bd_mode_adjusted": false,
-      "explanation": "Risk is moderate at 22/100 with 24-day lead time.",
-      "key_factors": ["risk_score: 22/100", "lead_time: 24 days"],
-      "confidence": "medium",
-      "confidence_reason": "Risk uses lead time, MOQ, and risk score."
-    }
-  ],
-  "comparison": [
-    {
-      "supplier_id": "<uuid from candidate list>",
-      "scorecard": {
-        "price": 1.2,
-        "lead_time_days": 24,
-        "moq": 500,
-        "on_time_rate": 96,
-        "quality_rating": 4.7
-      },
-      "explanation": "Compares at $1.2/unit, 500 MOQ, and 4.7/5 quality.",
-      "key_factors": ["unit_price: $1.2", "quality_rating: 4.7/5"],
-      "confidence": "medium",
-      "confidence_reason": "Comparison uses concrete supplier row fields."
-    }
-  ]
-}
-Return exactly ${candidates.length} items in each array. Use only supplier_id values from the candidate list. Use no extra top-level keys.`
-}
-
-function buildUserPrompt(query: string, candidates: Supplier[], bangladeshMode: boolean): string {
-  return [
-    `BUYER_BRIEF:\n${query}`,
-    bangladeshMode ? BANGLADESH_MODE_PROMPT : "",
-    `CANDIDATE_SUPPLIERS:\n${JSON.stringify(candidates.map(leanSupplier), null, 0)}`,
-    responseShape(candidates),
-    "Return one discovery, one risk, and one comparison object for every supplier_id.",
-  ]
-    .filter(Boolean)
-    .join("\n\n")
-}
-
 function buildBuyerFiltersBlock(filters: {
   country?: string | null
   region?: SupplierRegion | null
@@ -148,54 +154,29 @@ function buildBuyerFiltersBlock(filters: {
   return lines.length > 0 ? `BUYER_FILTERS:\n${lines.join("\n")}` : ""
 }
 
-function buildSingleSupplierPrompt(
-  query: string,
-  supplier: Supplier,
-  rank: number,
-  bangladeshMode: boolean,
-  buyerFilters: string,
-): string {
+function buildLiteRankingPrompt(query: string, candidates: Supplier[], bangladeshMode: boolean, buyerFilters: string): string {
   return [
+    "You are Sourcery, a sourcing ranking analyst.",
+    "Rank every supplier from best to worst for this buyer brief.",
+    "Return strict JSON only with one rankings[] item for every supplier.",
+    "Use supplier_id exactly as provided. Do not invent or omit suppliers.",
+    "fit_summary: one short sentence on why the supplier fits.",
+    "watchout: one short sentence on the main caution.",
+    "Mention concrete numbers when helpful, especially MOQ, lead time, price, quality rating, or on-time rate.",
     `BUYER_BRIEF:\n${query}`,
     bangladeshMode ? BANGLADESH_MODE_PROMPT : "",
     buyerFilters,
-    `SUPPLIER:\n${JSON.stringify(leanSupplier(supplier), null, 0)}`,
-    `Return strict JSON only with this exact shape:
-{
-  "discovery": {
-    "supplier_id": "${supplier.id}",
-    "rank": ${rank},
-    "fit_score": 75,
-    "explanation": "Use concrete supplier numbers.",
-    "key_factors": ["on_time_rate: ${supplier.on_time_rate}%", "lead_time: ${supplier.lead_time_days} days"],
-    "confidence": "high",
-    "confidence_reason": "One sentence under 160 chars."
-  },
-  "risk": {
-    "supplier_id": "${supplier.id}",
-    "risk_flags": ["Risk flag with concrete value"],
-    "bd_mode_adjusted": ${bangladeshMode && ["Bangladesh", "India", "Pakistan"].includes(supplier.country) ? "true" : "false"},
-    "explanation": "Use concrete supplier numbers.",
-    "key_factors": ["risk_score: ${supplier.risk_score}/100", "moq: ${supplier.moq}"],
-    "confidence": "medium",
-    "confidence_reason": "One sentence under 160 chars."
-  },
-  "comparison": {
-    "supplier_id": "${supplier.id}",
-    "scorecard": {
-      "price": ${supplier.unit_price_usd},
-      "lead_time_days": ${supplier.lead_time_days},
-      "moq": ${supplier.moq},
-      "on_time_rate": ${supplier.on_time_rate},
-      "quality_rating": ${supplier.quality_rating}
-    },
-    "explanation": "Use concrete supplier numbers.",
-    "key_factors": ["unit_price: $${supplier.unit_price_usd}", "quality_rating: ${supplier.quality_rating}/5"],
-    "confidence": "medium",
-    "confidence_reason": "One sentence under 160 chars."
-  }
+    `CANDIDATE_SUPPLIERS:\n${JSON.stringify(candidates.map(leanSupplier), null, 0)}`,
+    `JSON_RESPONSE_SHAPE:\n{
+  "rankings": [
+    {
+      "supplier_id": "<id>",
+      "rank": 1,
+      "fit_summary": "Strong balance of price and lead time for the brief.",
+      "watchout": "MOQ is 1500 units, so it is better for established demand."
+    }
+  ]
 }`,
-    "Do not change supplier_id, rank, or scorecard numbers. Keep explanations short and specific.",
   ]
     .filter(Boolean)
     .join("\n\n")
@@ -221,6 +202,12 @@ function deterministicFitScore(supplier: Supplier, query: string, bangladeshMode
   return Math.max(1, Math.min(100, Math.round(matchScore + qualityScore + deliveryScore + leadScore + bdBonus - riskPenalty)))
 }
 
+function discoveryConfidence(score: number): "high" | "medium" | "low" {
+  if (score >= 78) return "high"
+  if (score >= 55) return "medium"
+  return "low"
+}
+
 function riskFlags(supplier: Supplier, bangladeshMode: boolean): string[] {
   const flags: string[] = []
   if (supplier.lead_time_days > 45) flags.push(`Lead time is ${supplier.lead_time_days} days`)
@@ -233,22 +220,19 @@ function riskFlags(supplier: Supplier, bangladeshMode: boolean): string[] {
   return flags.slice(0, 5)
 }
 
-function deterministicOutput(suppliers: Supplier[], query: string, bangladeshMode: boolean): CombinedAgentOutput {
-  const ranked = suppliers
-    .map((supplier) => ({ supplier, fit: deterministicFitScore(supplier, query, bangladeshMode) }))
-    .sort((a, b) => b.fit - a.fit)
+function rankingKeyFactors(supplier: Supplier, watchout?: string): string[] {
+  const factors = [
+    `unit_price: $${supplier.unit_price_usd}`,
+    `lead_time: ${supplier.lead_time_days} days`,
+    `moq: ${supplier.moq}`,
+    `quality_rating: ${supplier.quality_rating}/5`,
+  ]
+  if (watchout) factors.push(`watchout: ${watchout}`)
+  return factors.slice(0, 5)
+}
 
-  const discovery: DiscoveryItem[] = ranked.map(({ supplier, fit }, index) => ({
-    supplier_id: supplier.id,
-    rank: index + 1,
-    fit_score: fit,
-    explanation: `${supplier.name} fits with ${supplier.on_time_rate}% on-time delivery, ${supplier.lead_time_days}-day lead time, and ${supplier.moq} MOQ.`,
-    key_factors: [`fit_score: ${fit}`, `on_time_rate: ${supplier.on_time_rate}%`, `lead_time: ${supplier.lead_time_days} days`, `moq: ${supplier.moq}`],
-    confidence: fit >= 72 ? "high" : fit >= 48 ? "medium" : "low",
-    confidence_reason: `Deterministic fallback used ${supplier.quality_rating}/5 quality and ${supplier.risk_score}/100 risk signals.`,
-  }))
-
-  const risk: RiskItem[] = ranked.map(({ supplier }) => {
+function buildRiskItems(suppliers: Supplier[], bangladeshMode: boolean, mode: "ai" | "deterministic_fallback"): RiskItem[] {
+  return suppliers.map((supplier) => {
     const flags = riskFlags(supplier, bangladeshMode)
     return {
       supplier_id: supplier.id,
@@ -257,11 +241,16 @@ function deterministicOutput(suppliers: Supplier[], query: string, bangladeshMod
       explanation: `${supplier.name} has ${supplier.risk_score}/100 risk, ${supplier.on_time_rate}% on-time delivery, and ${supplier.lead_time_days}-day lead time.`,
       key_factors: [`risk_score: ${supplier.risk_score}/100`, `on_time_rate: ${supplier.on_time_rate}%`, `lead_time: ${supplier.lead_time_days} days`],
       confidence: flags.length <= 1 ? "high" : flags.length <= 3 ? "medium" : "low",
-      confidence_reason: `Risk view is grounded in ${flags.length || 1} operational signals from the supplier row.`,
+      confidence_reason:
+        mode === "ai"
+          ? "Risk is computed directly from supplier data after the AI ranking step."
+          : `Risk view is grounded in ${flags.length || 1} operational signals from the supplier row.`,
     }
   })
+}
 
-  const comparison: ComparisonItem[] = ranked.map(({ supplier }) => ({
+function buildComparisonItems(suppliers: Supplier[], mode: "ai" | "deterministic_fallback"): ComparisonItem[] {
+  return suppliers.map((supplier) => ({
     supplier_id: supplier.id,
     scorecard: {
       price: supplier.unit_price_usd,
@@ -272,11 +261,86 @@ function deterministicOutput(suppliers: Supplier[], query: string, bangladeshMod
     },
     explanation: `${supplier.name} compares at $${supplier.unit_price_usd}/unit, ${supplier.moq} MOQ, and ${supplier.quality_rating}/5 quality.`,
     key_factors: [`unit_price: $${supplier.unit_price_usd}`, `moq: ${supplier.moq}`, `quality_rating: ${supplier.quality_rating}/5`],
-    confidence: "medium",
-    confidence_reason: "Comparison is deterministic because the AI layer was unavailable or disabled.",
+    confidence: mode === "ai" ? "high" : "medium",
+    confidence_reason:
+      mode === "ai"
+        ? "Comparison metrics are computed directly from the supplier dataset."
+        : "Comparison is rules-ranked because the AI layer was unavailable or disabled.",
+  }))
+}
+
+function buildDeterministicOutput(suppliers: Supplier[], query: string, bangladeshMode: boolean): CombinedAgentOutput {
+  const ranked = suppliers
+    .map((supplier) => ({ supplier, fit: deterministicFitScore(supplier, query, bangladeshMode) }))
+    .sort((a, b) => b.fit - a.fit)
+
+  const orderedSuppliers = ranked.map((item) => item.supplier)
+  const discovery: DiscoveryItem[] = ranked.map(({ supplier, fit }, index) => ({
+    supplier_id: supplier.id,
+    rank: index + 1,
+    fit_score: fit,
+    explanation: `${supplier.name} fits with ${supplier.on_time_rate}% on-time delivery, ${supplier.lead_time_days}-day lead time, and ${supplier.moq} MOQ.`,
+    key_factors: rankingKeyFactors(supplier),
+    confidence: discoveryConfidence(fit),
+    confidence_reason: `Data-ranked from supplier data using ${supplier.quality_rating}/5 quality, ${supplier.risk_score}/100 risk, MOQ, and lead time signals.`,
   }))
 
-  return { discovery, risk, comparison }
+  return {
+    discovery,
+    risk: buildRiskItems(orderedSuppliers, bangladeshMode, "deterministic_fallback"),
+    comparison: buildComparisonItems(orderedSuppliers, "deterministic_fallback"),
+  }
+}
+
+function validateLiteRanking(rankings: LiteRankingResponse, suppliers: Supplier[]): void {
+  const expectedIds = new Set(suppliers.map((supplier) => supplier.id))
+  const seenIds = new Set<string>()
+  const seenRanks = new Set<number>()
+
+  if (rankings.rankings.length !== suppliers.length) {
+    throw new Error(`Ranking response count mismatch. Expected ${suppliers.length}, received ${rankings.rankings.length}.`)
+  }
+
+  for (const item of rankings.rankings) {
+    if (!expectedIds.has(item.supplier_id)) throw new Error(`Unknown supplier_id in ranking response: ${item.supplier_id}`)
+    if (seenIds.has(item.supplier_id)) throw new Error(`Duplicate supplier_id in ranking response: ${item.supplier_id}`)
+    if (seenRanks.has(item.rank)) throw new Error(`Duplicate rank in ranking response: ${item.rank}`)
+    seenIds.add(item.supplier_id)
+    seenRanks.add(item.rank)
+  }
+}
+
+function buildAiGuidedOutput(rankings: LiteRankingResponse, suppliers: Supplier[], query: string, bangladeshMode: boolean): CombinedAgentOutput {
+  validateLiteRanking(rankings, suppliers)
+  const byId = new Map(suppliers.map((supplier) => [supplier.id, supplier]))
+  const ordered = rankings.rankings
+    .slice()
+    .sort((a, b) => a.rank - b.rank)
+    .map((item) => ({ ranking: item, supplier: byId.get(item.supplier_id)! }))
+
+  const descendingScores = ordered
+    .map(({ supplier }) => deterministicFitScore(supplier, query, bangladeshMode))
+    .sort((a, b) => b - a)
+
+  const discovery: DiscoveryItem[] = ordered.map(({ ranking, supplier }, index) => {
+    const fit = descendingScores[index] ?? deterministicFitScore(supplier, query, bangladeshMode)
+    return {
+      supplier_id: supplier.id,
+      rank: index + 1,
+      fit_score: fit,
+      explanation: ranking.fit_summary,
+      key_factors: rankingKeyFactors(supplier, ranking.watchout),
+      confidence: discoveryConfidence(fit),
+      confidence_reason: "AI-ranked using the buyer brief, then grounded by backend supplier metrics.",
+    }
+  })
+
+  const orderedSuppliers = ordered.map((item) => item.supplier)
+  return {
+    discovery,
+    risk: buildRiskItems(orderedSuppliers, bangladeshMode, "ai"),
+    comparison: buildComparisonItems(orderedSuppliers, "ai"),
+  }
 }
 
 function rollupConfidence(items: { confidence: "high" | "medium" | "low" }[]): "high" | "medium" | "low" {
@@ -288,122 +352,60 @@ function rollupConfidence(items: { confidence: "high" | "medium" | "low" }[]): "
   return "medium"
 }
 
-async function callCombinedAgent(
-  prompt: string,
-  maxOutputTokens: number,
-  retryHint?: string,
-): Promise<{ output: CombinedAgentOutput; provider: Exclude<AiGenerationProvider, "none"> }> {
-  const result = await generateStructuredObject({
-    system: ORCHESTRATOR_SYSTEM + (retryHint ? `\n\nRETRY_GUIDANCE:\n${retryHint}` : ""),
-    prompt,
-    maxOutputTokens,
-    schema: CombinedAgentOutputSchema,
+function deriveResultQuality(args: {
+  llmMode: "ai" | "deterministic_fallback"
+  supplierCount: number
+  confidence: "high" | "medium" | "low"
+}): ApiMeta["result_quality"] {
+  if (args.supplierCount <= 2) return "limited_supplier_pool"
+  if (args.llmMode === "deterministic_fallback") return "rules_based_fallback"
+  if (args.confidence === "high") return "high_confidence"
+  return "standard"
+}
+
+async function callLiteRankingAgent(
+  query: string,
+  suppliers: Supplier[],
+  bangladeshMode: boolean,
+  buyerFilters: string,
+  providerOverride: AiGenerationProvider,
+): Promise<{ output: LiteRankingResponse; provider: Exclude<AiGenerationProvider, "none"> }> {
+  return generateStructuredObject({
+    system: [
+      "You are Sourcery's sourcing ranking analyst.",
+      "Return valid JSON only.",
+      "Rank every supplier exactly once and keep summaries concise.",
+    ].join("\n"),
+    prompt: buildLiteRankingPrompt(query, suppliers, bangladeshMode, buyerFilters),
+    maxOutputTokens: 1800,
+    schema: LiteRankingResponseSchema,
+    jsonSchema: LITE_RANKING_JSON_SCHEMA,
+    providerOverride,
   })
-
-  return result
 }
 
-async function callSingleSupplierAgents(
-  suppliers: Supplier[],
-  query: string,
-  bangladeshMode: boolean,
-  buyerFilters: string,
-): Promise<{ output: CombinedAgentOutput; provider: Exclude<AiGenerationProvider, "none"> }> {
-  const items: Array<{
-    output: SingleSupplierAgentOutput
-    provider: Exclude<AiGenerationProvider, "none">
-  }> = []
-
-  for (const [index, supplier] of suppliers.entries()) {
-    const result = await generateStructuredObject<SingleSupplierAgentOutput>({
-      system: [
-        "You are Sourcery's lightweight sourcing analyst.",
-        "Score exactly one supplier for discovery, risk, and comparison.",
-        "Return valid JSON only. Use the numeric supplier row fields; do not invent data.",
-      ].join("\n"),
-      prompt: buildSingleSupplierPrompt(query, supplier, index + 1, bangladeshMode, buyerFilters),
-      maxOutputTokens: 900,
-      schema: SingleSupplierAgentOutputSchema,
-    })
-    items.push(result)
-  }
-
-  return {
-    output: {
-      discovery: items.map((item) => item.output.discovery).sort((a, b) => a.rank - b.rank),
-      risk: items.map((item) => item.output.risk),
-      comparison: items.map((item) => item.output.comparison),
-    },
-    provider: items[0]?.provider ?? "pollinations",
-  }
-}
-
-function completeAndRepair(out: CombinedAgentOutput, suppliers: Supplier[], fallback: CombinedAgentOutput): CombinedAgentOutput {
-  const supplierIds = suppliers.map((supplier) => supplier.id)
-  const supplierById = new Map(suppliers.map((supplier) => [supplier.id, supplier]))
-
-  const repairExplanation = <T extends { supplier_id: string; explanation: string; key_factors: string[]; confidence: "high" | "medium" | "low"; confidence_reason: string }>(item: T): T => {
-    if (validateExplainability(item)) return item
-    const supplier = supplierById.get(item.supplier_id)
-    if (!supplier) return item
-    const repaired = fallbackExplanation(supplier)
-    return { ...item, ...repaired }
-  }
-
-  const byId = <T extends { supplier_id: string }>(items: T[]) => new Map(items.map((item) => [item.supplier_id, item]))
-  const fallbackDiscovery = byId(fallback.discovery)
-  const fallbackRisk = byId(fallback.risk)
-  const fallbackComparison = byId(fallback.comparison)
-  const discovery = byId(out.discovery)
-  const risk = byId(out.risk)
-  const comparison = byId(out.comparison)
-
-  return {
-    discovery: supplierIds.map((id) => repairExplanation((discovery.get(id) ?? fallbackDiscovery.get(id))!)).sort((a, b) => a.rank - b.rank),
-    risk: supplierIds.map((id) => repairExplanation((risk.get(id) ?? fallbackRisk.get(id))!)),
-    comparison: supplierIds.map((id) => repairExplanation((comparison.get(id) ?? fallbackComparison.get(id))!)),
-  }
-}
-
-async function runAgentWithFallback(
-  prompt: string,
-  suppliers: Supplier[],
-  query: string,
-  bangladeshMode: boolean,
-  buyerFilters: string,
-  sourceProvider: AiGenerationProvider = getAiGenerationProvider(),
-): Promise<{ output: CombinedAgentOutput; mode: "ai" | "deterministic_fallback"; provider: AiGenerationProvider }> {
-  const fallback = deterministicOutput(suppliers, query, bangladeshMode)
-  const configuredProvider = sourceProvider
-
-  if (configuredProvider === "none") {
+async function runAgentWithFallback(args: {
+  suppliers: Supplier[]
+  query: string
+  bangladeshMode: boolean
+  buyerFilters: string
+  sourceProvider: AiGenerationProvider
+}): Promise<{ output: CombinedAgentOutput; mode: "ai" | "deterministic_fallback"; provider: AiGenerationProvider }> {
+  const fallback = buildDeterministicOutput(args.suppliers, args.query, args.bangladeshMode)
+  if (args.sourceProvider === "none") {
     return { output: fallback, mode: "deterministic_fallback", provider: "none" }
   }
 
   try {
-    if (configuredProvider === "pollinations") {
-      const lite = await callSingleSupplierAgents(suppliers, query, bangladeshMode, buyerFilters)
-      const repaired = completeAndRepair(lite.output, suppliers, fallback)
-      const invalid = [...repaired.discovery, ...repaired.risk, ...repaired.comparison].some((item) => !validateExplainability(item))
-      if (!invalid) return { output: repaired, mode: "ai", provider: lite.provider }
-      throw new Error("Pollinations supplier output failed explainability validation")
+    const ranked = await callLiteRankingAgent(args.query, args.suppliers, args.bangladeshMode, args.buyerFilters, args.sourceProvider)
+    return {
+      output: buildAiGuidedOutput(ranked.output, args.suppliers, args.query, args.bangladeshMode),
+      mode: "ai",
+      provider: ranked.provider,
     }
-
-    const maxOutputTokens = Math.max(3600, Math.min(5200, suppliers.length * 420))
-    const first = await callCombinedAgent(prompt, maxOutputTokens)
-    const repaired = completeAndRepair(first.output, suppliers, fallback)
-    const invalid = [...repaired.discovery, ...repaired.risk, ...repaired.comparison].some((item) => !validateExplainability(item))
-    if (!invalid) return { output: repaired, mode: "ai", provider: first.provider }
-
-    const retry = await callCombinedAgent(
-      prompt,
-      maxOutputTokens,
-      "Your previous explanations were too vague. Reference concrete numbers such as unit_price_usd, lead_time_days, moq, on_time_rate, quality_rating, or risk_score.",
-    )
-    return { output: completeAndRepair(retry.output, suppliers, fallback), mode: "ai", provider: retry.provider }
   } catch (err) {
     console.log("[sourcery] AI agent fallback:", (err as Error).message)
-    return { output: fallback, mode: "deterministic_fallback", provider: configuredProvider }
+    return { output: fallback, mode: "deterministic_fallback", provider: "none" }
   }
 }
 
@@ -420,6 +422,9 @@ function buildResult(args: {
   startedAt: number
 }): SourcingResult {
   const allConfidences = [...args.output.discovery, ...args.output.risk, ...args.output.comparison]
+  const confidence = rollupConfidence(allConfidences)
+  const countryDiversity = new Set(args.suppliers.map((supplier) => supplier.country)).size
+
   return {
     suppliers: args.suppliers,
     discovery: args.output.discovery,
@@ -429,12 +434,19 @@ function buildResult(args: {
       request_id: args.requestId,
       bangladeshMode: args.bangladeshMode,
       cached: args.cached,
-      confidence: rollupConfidence(allConfidences),
-      country_diversity: new Set(args.suppliers.map((supplier) => supplier.country)).size,
+      confidence,
+      country_diversity: countryDiversity,
       query: args.query,
       retrieval_mode: args.retrievalMode,
       llm_mode: args.llmMode,
       ai_provider: args.aiProvider,
+      result_mode: args.llmMode === "ai" ? "ai_ranked" : "rules_ranked",
+      result_quality: deriveResultQuality({
+        llmMode: args.llmMode,
+        supplierCount: args.suppliers.length,
+        confidence,
+      }),
+      ranking_version: RANKING_VERSION,
       elapsed_ms: Date.now() - args.startedAt,
     },
   }
@@ -458,25 +470,24 @@ export async function runSourcingOrchestrator(args: {
 }): Promise<SourcingResult> {
   const startedAt = Date.now()
   const detectedCategory = args.category ?? detectCategory(args.query)
-  if (
-    UNSUPPORTED_DEMO_QUERY.test(args.query) ||
-    !detectedCategory ||
-    !isSupportedProduct(detectedCategory, args.product)
-  ) {
+  if (UNSUPPORTED_DEMO_QUERY.test(args.query) || !detectedCategory || !isSupportedProduct(detectedCategory, args.product)) {
     throw new ApiRequestError(
       "BAD_REQUEST",
       `This demo workspace is locked to supported product paths. Please choose one category/product chip first. Supported paths: ${supportedProductHelpText()}`,
       400,
     )
   }
+
   const requestId = args.requestId ?? randomUUID()
   const topK = args.topK ?? 10
-  const configuredProvider = getAiGenerationProvider()
+  const configuredProvider = getSourceAiProvider()
   const sourceProvider =
-    (configuredProvider === "pollinations" || configuredProvider === "gemini") && !isFreeSourceAiEnabled()
+    (configuredProvider === "pollinations" || configuredProvider === "gemini" || configuredProvider === "groq") && !isFreeSourceAiEnabled()
       ? "none"
       : configuredProvider
+
   const cacheKey = buildCacheKey({
+    version: `source-${RANKING_VERSION}`,
     query: args.query,
     bangladeshMode: args.bangladeshMode,
     topK,
@@ -492,6 +503,7 @@ export async function runSourcingOrchestrator(args: {
     minQualityRating: args.minQualityRating,
     aiProvider: sourceProvider,
   })
+
   const cached = await getCached<SourcingResult>(cacheKey)
   if (cached) {
     return {
@@ -516,6 +528,7 @@ export async function runSourcingOrchestrator(args: {
     maxLeadTimeDays: args.maxLeadTimeDays,
     minQualityRating: args.minQualityRating,
   })
+
   if (retrieval.suppliers.length === 0) {
     throw new ApiRequestError(
       "NOT_FOUND",
@@ -535,8 +548,14 @@ export async function runSourcingOrchestrator(args: {
     maxLeadTimeDays: args.maxLeadTimeDays,
     minQualityRating: args.minQualityRating,
   })
-  const prompt = [buildUserPrompt(args.query, suppliers, args.bangladeshMode), buyerFilters].filter(Boolean).join("\n\n")
-  const agent = await runAgentWithFallback(prompt, suppliers, args.query, args.bangladeshMode, buyerFilters, sourceProvider)
+
+  const agent = await runAgentWithFallback({
+    suppliers,
+    query: args.query,
+    bangladeshMode: args.bangladeshMode,
+    buyerFilters,
+    sourceProvider,
+  })
 
   const result = buildResult({
     query: args.query,
@@ -551,9 +570,7 @@ export async function runSourcingOrchestrator(args: {
     startedAt,
   })
 
-  if (agent.mode === "ai" || agent.provider === "none") {
-    await setCached(cacheKey, result)
-  }
+  await setCached(cacheKey, result)
   await recordSourceEvent(result)
   return result
 }

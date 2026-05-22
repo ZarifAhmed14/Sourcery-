@@ -40,6 +40,7 @@ export type WorkspaceState = {
   selectedVariant?: string | null
   selectedSize?: string | null
   selectedId?: string | null
+  scrollY?: number
 }
 
 // Persist the latest sourcing result so /app/compare can pick it up without re-fetching.

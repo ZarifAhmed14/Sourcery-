@@ -22,7 +22,7 @@ const PRODUCT_PRICE_RANGES: Record<string, [number, number]> = {
   "jute tote bags": [1, 3],
   "leather handbags": [15, 35],
   backpacks: [4, 14],
-  "cotton-jute export totes": [1.2, 3.5],
+  "leather wallets": [2, 9],
   "cotton t-shirts": [2.5, 6],
   "organic cotton hoodies": [7, 16],
   "denim jeans": [8, 18],
@@ -90,18 +90,18 @@ export const PRODUCT_VISUAL_CATALOG: Record<string, ProductVisualConfig> = {
     ],
     sizes: ["12L", "18L", "24L", "Custom pocketing"],
   },
-  "cotton-jute export totes": {
-    displayName: "Cotton-jute export totes",
+  "leather wallets": {
+    displayName: "Leather wallets",
     variants: [
-      { name: "Natural cotton-jute", detail: "Plain reusable shopping tote" },
-      { name: "Screen printed", detail: "Brand artwork ready" },
-      { name: "Heavy GSM tote", detail: "Stronger export build" },
-      { name: "Contrast handle", detail: "Retail color detail" },
+      { name: "Bifold wallet", detail: "Classic everyday carry" },
+      { name: "Card holder", detail: "Slim minimalist profile" },
+      { name: "Zip wallet", detail: "Secure coin and cash storage" },
+      { name: "Passport wallet", detail: "Travel document organizer" },
     ],
-    sizes: ["Small", "Medium", "Large", "Custom GSM"],
+    sizes: ["Slim", "Standard", "Travel", "Custom leather"],
   },
   "cotton t-shirts": {
-    displayName: "Cotton crew neck t-shirts",
+    displayName: "Cotton t-shirt",
     variants: [
       { name: "Crew neck", detail: "Classic everyday t-shirt" },
       { name: "Oversized fit", detail: "Streetwear silhouette" },
@@ -115,7 +115,6 @@ export const PRODUCT_VISUAL_CATALOG: Record<string, ProductVisualConfig> = {
     variants: [
       { name: "Pullover hoodie", detail: "Classic fleece style" },
       { name: "Zip hoodie", detail: "Full zip construction" },
-      { name: "Heavyweight hoodie", detail: "Premium winter GSM" },
       { name: "Washed hoodie", detail: "Soft vintage finish" },
     ],
     sizes: ["S", "M", "L", "XL"],

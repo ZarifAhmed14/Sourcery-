@@ -121,7 +121,7 @@ export function LandingSuppliersSection() {
             <span>Supplier</span>
             <span>Category</span>
             <span>Location</span>
-            <span>Unit</span>
+            <span>Unit price</span>
             <span>Lead</span>
           </div>
 

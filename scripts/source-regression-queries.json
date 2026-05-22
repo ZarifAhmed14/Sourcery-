@@ -1,0 +1,37 @@
+[
+  {
+    "name": "bangladesh_jute_export",
+    "query": "Find Bangladesh jute bag suppliers for export",
+    "bangladeshMode": true,
+    "category": "accessories",
+    "product": "jute tote bags",
+    "topK": 3
+  },
+  {
+    "name": "denim_south_asia",
+    "query": "Find South Asia denim jeans suppliers for private label",
+    "bangladeshMode": true,
+    "category": "apparel",
+    "product": "denim jeans",
+    "topK": 4
+  },
+  {
+    "name": "spice_pouches_sea",
+    "query": "Find spice blend pouch suppliers in Southeast Asia for export",
+    "bangladeshMode": false,
+    "category": "food",
+    "product": "spice blends",
+    "region": "Southeast Asia",
+    "topK": 4
+  },
+  {
+    "name": "organic_tea_private_label",
+    "query": "Find private label tea packs suppliers with low MOQ",
+    "bangladeshMode": false,
+    "category": "food",
+    "product": "tea packs",
+    "topK": 4
+  }
+]
+
+

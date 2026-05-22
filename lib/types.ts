@@ -63,6 +63,9 @@ export type ApiMeta = {
   cached: boolean
   retrieval_mode: "vector" | "full_text" | "deterministic"
   llm_mode: "ai" | "deterministic_fallback"
-  ai_provider: "ai_sdk" | "gemini" | "pollinations" | "none"
+  ai_provider: "ai_sdk" | "groq" | "gemini" | "pollinations" | "none"
+  result_mode: "ai_ranked" | "rules_ranked"
+  result_quality: "high_confidence" | "rules_based_fallback" | "limited_supplier_pool" | "standard"
+  ranking_version: string
   elapsed_ms: number
 }

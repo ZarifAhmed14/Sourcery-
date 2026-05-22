@@ -4,20 +4,59 @@ import Link from "next/link"
 import type { ComponentType } from "react"
 import { useEffect, useMemo, useState } from "react"
 import { useSearchParams } from "next/navigation"
-import { ArrowLeft, GitCompare, LineChart, ShieldCheck, Sparkles, TrendingUp } from "lucide-react"
+import { ArrowLeft, ArrowRight, GitCompare, LineChart, Plane, ShieldCheck, ShipWheel, Sparkles, TrendingUp, Truck } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { ProfitPanel } from "@/components/sourcery/profit-panel"
 import { SimulationPanel } from "@/components/sourcery/simulation-panel"
 import { TermLabel } from "@/components/sourcery/term-help"
-import { loadLatestResult, readCompareSupplierIds, readShortlistIds } from "@/lib/sourcing-result-store"
+import { loadLatestResult, readCompareSupplierIds, readShortlistIds, readWorkspaceState } from "@/lib/sourcing-result-store"
 import { DEFAULT_PROFIT_INPUTS, type ProfitInputs } from "@/lib/profit"
 import type { SourcingResult } from "@/lib/sourcery/orchestrator"
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
 import { formatMoney } from "@/lib/currency"
 import { usePreferences } from "@/lib/preferences-context"
-import { getProductImage } from "@/lib/product-images"
+import { getProductImage, getProductVariantImage } from "@/lib/product-images"
 import type { Supplier } from "@/lib/types"
 import { BackNavButton } from "@/components/sourcery/back-nav-button"
+import { inferSupplierLogisticsLane } from "@/lib/sourcery/supplier-profile-enrichment"
+
+function resultModeLabel(meta?: SourcingResult["meta"] | null) {
+  if (!meta) return "Focused review"
+  return meta.result_mode === "ai_ranked" ? "AI-ranked" : "Data-ranked"
+}
+
+function confidenceLabel(meta?: SourcingResult["meta"] | null, supplierCount = 0) {
+  if (!meta) return "Single supplier review"
+  if (meta.result_quality === "limited_supplier_pool" || supplierCount < 3) return "Limited supplier pool"
+  if (meta.result_quality === "high_confidence") return "High confidence"
+  if (meta.result_quality === "rules_based_fallback") return "Standard confidence"
+  return "Standard confidence"
+}
+
+function rankingReason(args: {
+  supplier: Supplier
+  rank: number
+  result: SourcingResult | null
+}) {
+  const { supplier, rank, result } = args
+  const discovery = result?.discovery.find((item) => item.supplier_id === supplier.id)
+  const product = supplier.products?.[0] ?? supplier.subcategory
+  const score = discovery ? `${Math.round(discovery.fit_score)}% fit` : "focused profile"
+  const factors = discovery?.key_factors?.filter(Boolean).slice(0, 2).join(", ")
+  const frontRunner = rank === 1 ? "Current front-runner" : "Backup comparison option"
+
+  return `${frontRunner}: ${score} for ${product}, with ${formatMoney(supplier.unit_price_usd, false)} unit cost, ${supplier.moq.toLocaleString()} MOQ, and ${supplier.lead_time_days} day lead. ${
+    factors ? `Signals: ${factors}.` : ""
+  }`.trim()
+}
+
+function buyerWarning(meta?: SourcingResult["meta"] | null, supplierCount = 0) {
+  if (!meta) return "This view is focused on one supplier, so compare it against alternatives before placing a real order."
+  if (meta.result_quality === "limited_supplier_pool" || supplierCount < 3) {
+    return "The supplier pool is narrow for this search. Use the profit view for screening, then verify samples, final quote, and delivery terms before committing."
+  }
+  return null
+}
 
 export default function ComparePage() {
   const searchParams = useSearchParams()
@@ -27,12 +66,17 @@ export default function ComparePage() {
   const [shortlistIds, setShortlistIds] = useState<string[]>([])
   const [singleSupplier, setSingleSupplier] = useState<Supplier | null>(null)
   const [compareIds, setCompareIds] = useState<string[]>([])
+  const [selectedProduct, setSelectedProduct] = useState<string | null>(null)
+  const [selectedVariant, setSelectedVariant] = useState<string | null>(null)
   const { bangladeshMode } = usePreferences()
 
   useEffect(() => {
+    const workspaceState = readWorkspaceState()
     setResult(loadLatestResult())
     setShortlistIds(readShortlistIds())
     setCompareIds(readCompareSupplierIds())
+    setSelectedProduct(workspaceState?.selectedProduct ?? null)
+    setSelectedVariant(workspaceState?.selectedVariant ?? null)
   }, [])
 
   useEffect(() => {
@@ -97,16 +141,24 @@ export default function ComparePage() {
   const best = top5[0]
   const lowestRisk = top5.reduce((candidate, supplier) => (supplier.risk_score < candidate.risk_score ? supplier : candidate), best)
   const lowestUnit = top5.reduce((candidate, supplier) => (supplier.unit_price_usd < candidate.unit_price_usd ? supplier : candidate), best)
-  const productName = best.products?.[0] ?? best.subcategory
-  const productImage = getProductImage({ supplier: best, product: productName })
+  const productName = selectedVariant ?? best.products?.[0] ?? best.subcategory
+  const productImage =
+    selectedProduct && selectedVariant
+      ? getProductVariantImage(selectedProduct, selectedVariant, 0)
+      : getProductImage({ supplier: best, product: productName })
   const compareQuery = result?.meta.query ?? `Focused review for ${best.name}`
   const singleMode = top5.length === 1
   const backTarget = supplierId ? `/app/suppliers/${supplierId}` : "/app"
+  const warning = buyerWarning(result?.meta, top5.length)
 
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <BackNavButton fallbackHref={backTarget} label={supplierId ? "Back to supplier profile" : "Back to workspace"} />
+        <BackNavButton
+          fallbackHref={backTarget}
+          label={supplierId ? "Back to supplier profile" : "Back to workspace"}
+          preserveWorkspace={!supplierId}
+        />
         {supplierId && result ? (
           <Button asChild variant="outline" className="rounded-md border-black/10 bg-transparent text-[#16201d] hover:bg-[#f1ede3]">
             <Link href="/app/compare">
@@ -139,10 +191,15 @@ export default function ComparePage() {
         </div>
         <div className="mt-7 grid gap-3 md:grid-cols-4">
           <ProofPill icon={GitCompare} label={`${top5.length} supplier${top5.length > 1 ? "s" : ""}`} detail={singleMode ? "focused review" : "top-ranked candidates"} />
-          <ProofPill icon={ShieldCheck} label="Risk checked" detail="score, lead, certification" />
+          <ProofPill icon={ShieldCheck} label={resultModeLabel(result?.meta)} detail={confidenceLabel(result?.meta, top5.length)} />
           <ProofPill icon={LineChart} label="Profit ready" detail="margin and landed cost" />
           <ProofPill icon={LineChart} label="Simulation" detail="profit stress test" />
         </div>
+        {warning ? (
+          <div className="mt-5 rounded-lg border border-[#d9b44a]/25 bg-[#fff8df] px-4 py-3 text-sm leading-6 text-[#6b5a24]">
+            {warning}
+          </div>
+        ) : null}
       </section>
 
       <section className="grid gap-4 lg:grid-cols-[0.95fr_1.05fr]">
@@ -157,7 +214,7 @@ export default function ComparePage() {
               <p className="mt-2 text-sm leading-6 text-[#5d6965]">
                 {singleMode
                   ? "Use the profit panel and simulation below to see whether this supplier still works after shipping, customs, and pricing assumptions are added."
-                  : `${lowestRisk.name} carries the lowest risk, while ${lowestUnit.name} has the lowest unit price. Use the profit panel below to decide whether margin or operational reliability matters more for this order.`}
+                  : `${lowestRisk.name} carries the lowest risk, while ${lowestUnit.name} has the lowest unit price. ${rankingReason({ supplier: best, rank: 1, result })}`}
               </p>
             </div>
           </div>
@@ -166,7 +223,50 @@ export default function ComparePage() {
         <div className="grid gap-3 sm:grid-cols-3">
           <DecisionMetric label="Fastest lead" value={`${Math.min(...top5.map((s) => s.lead_time_days))}d`} />
           <DecisionMetric label="Lowest risk" value={`${lowestRisk.risk_score}/100`} />
-          <DecisionMetric label="Lowest unit" value={formatMoney(lowestUnit.unit_price_usd, bangladeshMode)} />
+          <DecisionMetric label="Lowest unit price" value={formatMoney(lowestUnit.unit_price_usd, bangladeshMode)} />
+        </div>
+      </section>
+
+      <section className="rounded-lg border border-black/10 bg-white p-5 shadow-sm">
+        <div className="flex items-start gap-3">
+          <LineChart className="mt-1 h-5 w-5 text-[#d9b44a]" />
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#7a5b0f]">Logistics route review</p>
+            <h2 className="mt-2 text-2xl font-semibold text-[#16201d]">How these suppliers are most likely to deliver</h2>
+            <p className="mt-2 text-sm leading-6 text-[#5d6965]">
+              This gives the same buyer-facing freight logic from the supplier profile inside the profit and simulation view, so landed-cost thinking stays tied to the route.
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-5 grid gap-3 lg:grid-cols-2">
+          {top5.map((supplier, index) => {
+            const lane = inferSupplierLogisticsLane({ supplier })
+            return (
+              <div key={supplier.id} className="rounded-xl border border-black/10 bg-[#f7f4ec] p-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#6d7a75]">#{index + 1} {lane.modeLabel}</p>
+                    <h3 className="mt-1 text-lg font-semibold text-[#16201d]">{supplier.name}</h3>
+                  </div>
+                  <div className="flex items-center gap-2 rounded-full bg-white px-3 py-1 text-xs font-semibold text-[#16201d]">
+                    <LogisticsIcon mode={lane.mode} />
+                    ETA {lane.etaLabel}
+                  </div>
+                </div>
+
+                <div className="mt-4 grid gap-3 md:grid-cols-[1fr_auto_1fr] md:items-center">
+                  <RouteStop label="Comes from" value={lane.originLabel} />
+                  <div className="hidden justify-center md:flex">
+                    <ArrowRight className="h-5 w-5 text-[#7a857f]" />
+                  </div>
+                  <RouteStop label="Ends up at" value={lane.destinationLabel} detail={lane.destinationDetail} />
+                </div>
+
+                <p className="mt-4 text-sm leading-6 text-[#5d6965]">{lane.rationale}</p>
+              </div>
+            )
+          })}
         </div>
       </section>
 
@@ -181,7 +281,7 @@ export default function ComparePage() {
         <div className="grid grid-cols-[1.25fr_0.65fr_0.55fr_0.55fr_0.55fr_0.75fr] gap-3 px-5 py-3 text-xs font-semibold uppercase tracking-[0.14em] text-[#6d7a75]">
           <span>Supplier</span>
           <span>Location</span>
-          <TermLabel label="Unit" />
+          <TermLabel label="Unit price" />
           <TermLabel label="MOQ" />
           <TermLabel label="Lead" />
           <TermLabel label="Risk" />
@@ -191,6 +291,7 @@ export default function ComparePage() {
             <div>
               <div className="font-semibold text-[#16201d]">#{index + 1} {supplier.name}</div>
               <div className="mt-1 text-xs text-[#6d7a75]">{supplier.certifications.slice(0, 3).join(", ") || "Certification not listed"}</div>
+              <div className="mt-2 text-xs leading-5 text-[#53605c]">{rankingReason({ supplier, rank: index + 1, result })}</div>
             </div>
             <span className="text-[#53605c]">{supplier.country}</span>
             <span className="font-semibold text-[#16201d]">{formatMoney(supplier.unit_price_usd, bangladeshMode)}</span>
@@ -232,6 +333,22 @@ function ProofPill({
       <Icon className="h-4 w-4 text-[#d9b44a]" />
       <div className="mt-3 text-sm font-semibold text-white">{label}</div>
       <div className="mt-1 text-xs text-[#bdc8c2]">{detail}</div>
+    </div>
+  )
+}
+
+function LogisticsIcon({ mode }: { mode: "ship" | "air" | "road" }) {
+  if (mode === "air") return <Plane className="h-4 w-4" />
+  if (mode === "road") return <Truck className="h-4 w-4" />
+  return <ShipWheel className="h-4 w-4" />
+}
+
+function RouteStop({ label, value, detail }: { label: string; value: string; detail?: string }) {
+  return (
+    <div className="rounded-lg border border-black/10 bg-white px-4 py-3">
+      <div className="text-xs uppercase tracking-[0.16em] text-[#6d7a75]">{label}</div>
+      <div className="mt-1 text-sm font-semibold text-[#16201d]">{value}</div>
+      {detail ? <div className="mt-1 text-xs leading-5 text-[#5d6965]">{detail}</div> : null}
     </div>
   )
 }

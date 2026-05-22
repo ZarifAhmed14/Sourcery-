@@ -1,6 +1,6 @@
-import { BargainRequestSchema } from "@/lib/schemas"
+﻿import { BargainRequestSchema } from "@/lib/schemas"
 import type { z } from "zod"
-import { getAiGenerationProvider } from "@/lib/env"
+import { getBargainAiProvider } from "@/lib/env"
 import { generatePlainText } from "@/lib/ai/generation"
 import { BARGAIN_RATE_LIMIT, checkRateLimit } from "@/lib/backend/rate-limit"
 import { errorJson, getClientIp, handleApiError, okJson, parseJson, readJson } from "@/lib/backend/http"
@@ -17,7 +17,7 @@ function deterministicBanglaFallback(input: BargainInput): string {
     `আসসালামু আলাইকুম, ${input.supplier.name} টিম,`,
     `আমরা ${input.supplier.country} থেকে ${productDescription} সোর্সিং করতে আগ্রহী।`,
     `আপনাদের ইউনিট মূল্য $${input.supplier.unit_price_usd}, MOQ ${input.supplier.moq} ইউনিট এবং লিড টাইম ${input.supplier.lead_time_days} দিন দেখেছি।`,
-    `${orderQuantity} ইউনিট অর্ডারের জন্য সেরা মূল্য, স্যাম্পল সুবিধা এবং উৎপাদন সময় জানালে উপকৃত হব।`,
+    `${orderQuantity} ইউনিট অর্ডারের জন্য সেরা মূল্য, স্যাম্পল সুবিধা এবং উৎপাদন সময় জানালে উপকৃত হব।`,
   ].join(" ")
 }
 
@@ -38,7 +38,7 @@ export async function POST(req: Request) {
       orderQuantity: rawInput.orderQuantity ?? 300,
     }
     const fallback = deterministicBanglaFallback(input)
-    const provider = getAiGenerationProvider()
+    const provider = getBargainAiProvider()
 
     if (provider === "none") {
       return okJson({ message: fallback, meta: { llm_mode: "deterministic_fallback", ai_provider: "none" } })
@@ -58,6 +58,7 @@ export async function POST(req: Request) {
       const result = await generatePlainText({
         prompt,
         maxOutputTokens: 220,
+        providerOverride: provider,
       })
       const message = result.text.trim()
       return okJson({

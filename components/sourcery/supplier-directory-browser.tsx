@@ -1,10 +1,9 @@
-"use client"
+﻿"use client"
 
 import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
-import { ArrowRight, BadgeCheck, MapPin, Search, ShieldAlert } from "lucide-react"
+import { ArrowRight, BadgeCheck, MapPin, Search, Sparkles } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { readShortlistIds, saveShortlistIds } from "@/lib/sourcing-result-store"
 import type { Supplier, SupplierCategory } from "@/lib/types"
 import { cn } from "@/lib/utils"
 import { formatMoney } from "@/lib/currency"
@@ -28,11 +27,9 @@ export function SupplierDirectoryBrowser() {
   const [query, setQuery] = useState("")
   const [category, setCategory] = useState<SupplierCategory | "all">("all")
   const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [shortlist, setShortlist] = useState<string[]>([])
   const { bangladeshMode } = usePreferences()
 
   useEffect(() => {
-    setShortlist(readShortlistIds())
     void fetch("/api/suppliers?limit=50")
       .then((res) => res.json())
       .then((data: SupplierListResponse) => {
@@ -56,16 +53,6 @@ export function SupplierDirectoryBrowser() {
 
   const selected =
     filtered.find((supplier) => supplier.id === selectedId) ?? suppliers.find((supplier) => supplier.id === selectedId) ?? null
-
-  const toggleShortlist = (supplierId: string) => {
-    setShortlist((current) => {
-      const next = current.includes(supplierId)
-        ? current.filter((item) => item !== supplierId)
-        : [...current, supplierId].slice(0, 4)
-      saveShortlistIds(next)
-      return next
-    })
-  }
 
   return (
     <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
@@ -100,35 +87,29 @@ export function SupplierDirectoryBrowser() {
         </div>
 
         <div className="mt-5 overflow-hidden rounded-3xl border border-black/10">
-          <div className="grid grid-cols-[1.3fr_0.7fr_0.65fr_0.45fr_0.55fr] gap-3 bg-[#eef1ea] px-4 py-3 text-xs font-semibold uppercase tracking-[0.16em] text-[#6d7a75]">
+          <div className="grid grid-cols-[1.2fr_0.65fr_0.65fr_0.7fr_0.8fr] gap-3 bg-[#eef1ea] px-4 py-3 text-xs font-semibold uppercase tracking-[0.16em] text-[#6d7a75]">
             <div>Supplier</div>
             <div>Category</div>
             <div>Location</div>
-            <div>Risk</div>
-            <div />
+            <div>Best for</div>
+            <div>Best delivery fit</div>
           </div>
           {filtered.map((supplier) => (
             <div
               key={supplier.id}
               className={cn(
-                "grid grid-cols-[1.3fr_0.7fr_0.65fr_0.45fr_0.55fr] gap-3 border-t border-black/10 px-4 py-4 text-sm",
+                "grid grid-cols-[1.2fr_0.65fr_0.65fr_0.7fr_0.8fr] gap-3 border-t border-black/10 px-4 py-4 text-sm",
                 selected?.id === supplier.id && "bg-[#f7fbf9]",
               )}
             >
               <button type="button" onClick={() => setSelectedId(supplier.id)} className="min-w-0 text-left">
                 <div className="truncate font-medium text-[#16201d]">{supplier.name}</div>
-                <div className="mt-1 truncate text-xs text-[#6d7a75]">{supplier.products?.slice(0, 2).join(" • ") || supplier.subcategory}</div>
+                <div className="mt-1 truncate text-xs text-[#6d7a75]">{supplier.products?.slice(0, 2).join(" | ") || supplier.subcategory}</div>
               </button>
               <div className="capitalize text-[#53605c]">{supplier.category}</div>
               <div className="truncate text-[#53605c]">{supplier.country}</div>
-              <div className="text-[#53605c]">{supplier.risk_score}</div>
-              <button
-                type="button"
-                onClick={() => toggleShortlist(supplier.id)}
-                className="justify-self-end rounded-full border border-black/10 px-3 py-1 text-xs text-[#16201d]"
-              >
-                {shortlist.includes(supplier.id) ? "Shortlisted" : "Shortlist"}
-              </button>
+              <div className="text-[#53605c]">{supplierBestFor(supplier)}</div>
+              <div className="text-sm text-[#53605c]">{supplierDeliveryFit(supplier)}</div>
             </div>
           ))}
         </div>
@@ -147,15 +128,16 @@ export function SupplierDirectoryBrowser() {
                 </p>
               </div>
               <div className="rounded-full bg-[#eef1ea] px-3 py-1 text-xs font-semibold text-[#51605a]">
-                Risk {selected.risk_score}
+                Best for {supplierBestFor(selected)}
               </div>
             </div>
 
             <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
               <ProfileItem label="Category" value={selected.category} />
               <ProfileItem label="Products" value={selected.products?.join(", ") || selected.subcategory} />
+              <ProfileItem label="Best for" value={supplierBestForDetail(selected)} />
               <ProfileItem label="Certifications" value={selected.certifications.join(", ") || "Not listed"} />
-              <ProfileItem label="Operational metrics" value={`${selected.moq} MOQ • ${selected.lead_time_days}d lead • ${formatMoney(selected.unit_price_usd, bangladeshMode)}`} />
+              <ProfileItem label="Operational metrics" value={`${selected.moq} MOQ | ${selected.lead_time_days}d lead | ${formatMoney(selected.unit_price_usd, bangladeshMode)}`} />
             </div>
 
             <p className="mt-5 text-sm leading-6 text-[#4e5a55]">{selected.description}</p>
@@ -168,14 +150,14 @@ export function SupplierDirectoryBrowser() {
                 </span>
               )}
               <span className="inline-flex items-center gap-1 rounded-full bg-[#fff8df] px-3 py-1 text-xs font-medium text-[#7a5b0f]">
-                <ShieldAlert className="h-3.5 w-3.5" />
-                {selected.risk_notes ?? "Risk explanation available in sourcing and compare views"}
+                <Sparkles className="h-3.5 w-3.5" />
+                {supplierBestForDetail(selected)}
               </span>
             </div>
 
             <div className="mt-5 flex flex-wrap gap-2">
-              <Button type="button" onClick={() => toggleShortlist(selected.id)} variant="outline" className="rounded-full bg-transparent">
-                {shortlist.includes(selected.id) ? "Remove from shortlist" : "Shortlist supplier"}
+              <Button asChild variant="outline" className="rounded-full bg-transparent">
+                <Link href={`/app/compare?supplier=${selected.id}`}>Profit view</Link>
               </Button>
               <Button asChild className="rounded-full bg-[#16201d] text-[#f7f4ec] hover:bg-[#24332f]">
                 <Link href={`/app/suppliers/${selected.id}`}>
@@ -193,6 +175,40 @@ export function SupplierDirectoryBrowser() {
       </aside>
     </div>
   )
+}
+
+function supplierBestFor(supplier: Supplier): string {
+  if (supplier.moq <= 400) return "small test orders"
+  if (supplier.lead_time_days <= 22) return "fast restocks"
+  if (supplier.unit_price_usd <= 2.5) return "margin-first buying"
+  if ((supplier.rating ?? supplier.quality_rating ?? 0) >= 4.6) return "premium quality"
+  if (supplier.bgmea_certified) return "compliance-sensitive sourcing"
+  if (supplier.country === "Bangladesh") return "local Bangladesh sourcing"
+  return "balanced sourcing"
+}
+
+function supplierBestForDetail(supplier: Supplier): string {
+  if (supplier.moq <= 400) return "Best for small test orders with lower upfront inventory risk."
+  if (supplier.lead_time_days <= 22) return "Best for fast restocks when speed matters more than deep customization."
+  if (supplier.unit_price_usd <= 2.5) return "Best for margin-first buying where landed cost discipline is the priority."
+  if ((supplier.rating ?? supplier.quality_rating ?? 0) >= 4.6) return "Best for premium quality programs where finish and consistency matter most."
+  if (supplier.bgmea_certified) return "Best for compliance-sensitive sourcing with stronger buyer reassurance."
+  if (supplier.country === "Bangladesh") return "Best for local Bangladesh sourcing when proximity and familiarity matter."
+  return "Best for balanced sourcing when you need a practical middle ground across price, speed, and quality."
+}
+
+function supplierDeliveryFit(supplier: Supplier): string {
+  if (supplier.country === "Bangladesh" || supplier.country === "India" || supplier.country === "Pakistan") {
+    if (supplier.moq <= 400 || supplier.lead_time_days <= 18) return "Air-ready"
+    if (supplier.moq >= 1500) return "Sea-first"
+    return "Flexible mix"
+  }
+
+  if (supplier.region === "Europe") return "Road-friendly"
+  if (supplier.lead_time_days <= 16) return "Air for urgent runs"
+  if (supplier.moq >= 1200 || supplier.unit_price_usd <= 2.5) return "Sea for margin protection"
+  if (supplier.region === "Southeast Asia" || supplier.region === "East Asia") return "Sea-first"
+  return "Flexible mix"
 }
 
 function ProfileItem({ label, value }: { label: string; value: string }) {

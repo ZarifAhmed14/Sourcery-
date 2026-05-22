@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils"
 
 const TERM_DEFINITIONS: Record<string, string> = {
   Unit: "Estimated supplier price for one item before shipping, duty, and packaging.",
+  "Unit price": "Estimated supplier price for one item before shipping, duty, and packaging.",
   MOQ: "Minimum order quantity: the smallest order a supplier will usually accept.",
   Lead: "Estimated days before the supplier can get the goods ready to ship.",
   Risk: "Lower is safer; this estimates quality, delivery, MOQ, and shipping risk.",

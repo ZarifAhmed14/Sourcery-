@@ -24,8 +24,6 @@ import {
   markWorkspaceReturnIntent,
   saveLatestResult,
   pushRecentQuery,
-  readShortlistIds,
-  saveShortlistIds,
   readWorkspaceState,
   saveWorkspaceState,
   saveCompareSupplierIds,
@@ -34,7 +32,7 @@ import { saveSearchAction } from "@/lib/sourcery/actions"
 import { SUPPORTED_PRODUCT_CATALOG } from "@/lib/sourcery/supported-products"
 import { getProductPriceBands, getProductVisualConfig, productDisplayName, type ProductPriceBand, type ProductVariant, type ProductVisualConfig } from "@/lib/sourcery/product-variants"
 import { formatMoney } from "@/lib/currency"
-import { getProductImage, getVariantPlaceholderImage } from "@/lib/product-images"
+import { getProductVariantImage } from "@/lib/product-images"
 import type { SourcingResult } from "@/lib/sourcery/orchestrator"
 import type { Supplier, SupplierCategory, SupplierRegion } from "@/lib/types"
 
@@ -154,6 +152,16 @@ function displaySupplierName(supplier: Supplier) {
     .trim()
 }
 
+function supplierBestFor(supplier: Supplier): string {
+  if (supplier.moq <= 400) return "small test orders"
+  if (supplier.lead_time_days <= 22) return "fast restocks"
+  if (supplier.unit_price_usd <= 2.5) return "margin-first buying"
+  if ((supplier.rating ?? supplier.quality_rating) >= 4.6) return "premium quality"
+  if (supplier.bgmea_certified) return "compliance-sensitive sourcing"
+  if (supplier.country === "Bangladesh") return "local Bangladesh sourcing"
+  return "balanced sourcing"
+}
+
 function extractApiErrorMessage(payload: unknown): string | null {
   if (!payload || typeof payload !== "object") return null
 
@@ -170,6 +178,44 @@ function extractApiErrorMessage(payload: unknown): string | null {
   return null
 }
 
+function supplierConfidenceLabel(args: {
+  confidence: "high" | "medium" | "low"
+  fitScore: number
+  resultQuality?: SourcingResult["meta"]["result_quality"]
+}) {
+  if (args.resultQuality === "limited_supplier_pool") {
+    return { label: "Limited pool", className: "bg-[#f6e8e8] text-[#8d3b3b]" }
+  }
+  if (args.confidence === "high" || args.fitScore >= 80) {
+    return { label: "High confidence", className: "bg-[#edf6f1] text-[#165c49]" }
+  }
+  if (args.confidence === "low" || args.fitScore < 55) {
+    return { label: "Needs buyer check", className: "bg-[#fff1d6] text-[#8a5a00]" }
+  }
+  return { label: "Standard confidence", className: "bg-[#ede8dc] text-[#53605c]" }
+}
+
+function whySupplierWon(args: {
+  supplier: Supplier
+  discovery: SourcingResult["discovery"][number]
+  rank: number
+  totalVisible: number
+}) {
+  const { supplier, discovery, rank, totalVisible } = args
+  const product = supplier.products?.[0] ?? supplier.subcategory
+  const strengths = buildKeyPills(supplier, discovery.key_factors).slice(0, 3)
+  const leadText = supplier.lead_time_days <= 25 ? "short lead time" : `${supplier.lead_time_days} day lead time`
+  const moqText = supplier.moq <= 600 ? "manageable MOQ" : `${supplier.moq.toLocaleString()} MOQ`
+  const intro =
+    rank === 1
+      ? `Sourcery put this first because it is the strongest available match for ${product}.`
+      : `Sourcery kept this in the shortlist because it gives the buyer another workable ${product} option.`
+
+  return `${intro} The profile balances ${formatMoney(supplier.unit_price_usd, false)} unit cost, ${moqText}, and ${leadText}. ${
+    strengths.length > 0 ? `Main signals: ${strengths.join(", ")}.` : ""
+  } ${totalVisible <= 2 ? "Because the supplier pool is narrow, sample checks matter more before committing." : ""}`.trim()
+}
+
 export function SourcingChat() {
   const { bangladeshMode } = usePreferences()
 
@@ -178,7 +224,6 @@ export function SourcingChat() {
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
   const [error, setError] = useState<string | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [shortlist, setShortlist] = useState<string[]>([])
   const [hasSearched, setHasSearched] = useState(false)
   const [selectedCategory, setSelectedCategory] = useState<SupplierCategory | undefined>(undefined)
   const [selectedProduct, setSelectedProduct] = useState<string | undefined>(undefined)
@@ -189,6 +234,7 @@ export function SourcingChat() {
   const [selectedVariant, setSelectedVariant] = useState<string | null>(null)
   const [selectedSize, setSelectedSize] = useState<string | null>(null)
   const [hasRestoredState, setHasRestoredState] = useState(false)
+  const [restoreScrollY, setRestoreScrollY] = useState<number | null>(null)
 
   const resetSearchState = () => {
     setStatus("idle")
@@ -213,6 +259,7 @@ export function SourcingChat() {
       setSelectedVariant(savedState.selectedVariant ?? null)
       setSelectedSize(savedState.selectedSize ?? null)
       setSelectedId(savedState.selectedId ?? null)
+      setRestoreScrollY(typeof savedState.scrollY === "number" ? savedState.scrollY : null)
     } else {
       setHasSearched(false)
       setSelectedCategory(undefined)
@@ -224,12 +271,10 @@ export function SourcingChat() {
       setSelectedVariant(null)
       setSelectedSize(null)
       setSelectedId(null)
+      setRestoreScrollY(null)
     }
 
-    const latest =
-      shouldRestoreWorkspace && typeof window !== "undefined"
-        ? window.localStorage.getItem("sourcery.latest_result.v1")
-        : null
+    const latest = shouldRestoreWorkspace && typeof window !== "undefined" ? window.localStorage.getItem("sourcery.latest_result.v1") : null
     if (latest) {
       try {
         setResult(JSON.parse(latest) as SourcingResult)
@@ -242,8 +287,13 @@ export function SourcingChat() {
   }, [])
 
   useEffect(() => {
-    setShortlist(readShortlistIds())
-  }, [])
+    if (!hasRestoredState || typeof restoreScrollY !== "number") return
+    const id = window.setTimeout(() => {
+      window.scrollTo(0, restoreScrollY)
+      setRestoreScrollY(null)
+    }, 120)
+    return () => window.clearTimeout(id)
+  }, [hasRestoredState, restoreScrollY, result])
 
   useEffect(() => {
     let active = true
@@ -362,6 +412,7 @@ export function SourcingChat() {
       selectedVariant,
       selectedSize,
       selectedId,
+      scrollY: typeof window !== "undefined" ? window.scrollY : 0,
     })
   }, [
     hasRestoredState,
@@ -429,7 +480,7 @@ export function SourcingChat() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           query: composedQuery,
-          bangladeshMode: false,
+          bangladeshMode,
           topK: 5,
           category: selectedCategory,
           product: selectedProduct,
@@ -459,7 +510,7 @@ export function SourcingChat() {
       })
       void saveSearchAction({
         query: composedQuery,
-        bangladeshMode: false,
+        bangladeshMode,
         result: data,
         category: selectedCategory,
         product: selectedProduct,
@@ -476,16 +527,6 @@ export function SourcingChat() {
     await executeSourcing()
   }
 
-  const toggleShortlist = (supplierId: string) => {
-    setShortlist((current) => {
-      const next = current.includes(supplierId)
-        ? current.filter((item) => item !== supplierId)
-        : [...current, supplierId].slice(0, 4)
-      saveShortlistIds(next)
-      return next
-    })
-  }
-
   const persistWorkspaceSnapshot = (nextSelectedId?: string | null) => {
     saveWorkspaceState({
       query: "",
@@ -499,9 +540,17 @@ export function SourcingChat() {
       selectedVariant,
       selectedSize,
       selectedId: nextSelectedId ?? selectedId,
+      scrollY: typeof window !== "undefined" ? window.scrollY : 0,
     })
     saveCompareSupplierIds(displayedRanked.map((item) => item.supplier.id))
   }
+
+  useEffect(() => {
+    if (!hasRestoredState) return
+    const handlePageHide = () => persistWorkspaceSnapshot(selectedId)
+    window.addEventListener("pagehide", handlePageHide)
+    return () => window.removeEventListener("pagehide", handlePageHide)
+  }, [displayedRanked, hasRestoredState, selectedId])
 
   const filterPanel = (
     <div className="grid gap-3">
@@ -655,7 +704,7 @@ export function SourcingChat() {
   return (
     <div className="space-y-4">
       {!hasSearched ? (
-        <section className="grid gap-4 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,0.85fr)]">
+        <section className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,0.76fr)]">
           <section className="rounded-2xl border border-black/10 bg-white/78 p-5 shadow-sm backdrop-blur-sm md:p-6">
             <form onSubmit={onSubmit} className="space-y-4">
               {filterPanel}
@@ -700,7 +749,7 @@ export function SourcingChat() {
           </div>
         </section>
       ) : (
-      <section className="grid gap-4 lg:grid-cols-[minmax(0,0.78fr)_minmax(0,1fr)]">
+      <section className="grid gap-4 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,0.8fr)]">
         <section className="space-y-4 rounded-2xl border border-black/10 bg-white/78 p-4 shadow-sm backdrop-blur-sm md:p-5">
           {filterPanel}
 
@@ -720,12 +769,7 @@ export function SourcingChat() {
             {visibleRanked.map((item) => (
               <article
                 key={item.supplier.id}
-                className={cn(
-                  "rounded-2xl border p-4 transition",
-                  selectedSupplier?.id === item.supplier.id
-                    ? "border-[#d9b44a]/45 bg-[#fffdf7] shadow-sm"
-                    : "border-black/10 bg-white hover:border-[#d9b44a]/35 hover:shadow-sm",
-                )}
+                className="rounded-2xl border border-black/10 bg-white p-4 transition hover:border-[#d9b44a]/35 hover:shadow-sm"
               >
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0">
@@ -748,11 +792,11 @@ export function SourcingChat() {
                 </div>
 
                 <div className="mt-4 grid gap-2 sm:grid-cols-6">
-                  <MetricCard label="Unit" value={formatMoney(item.supplier.unit_price_usd, bangladeshMode)} />
+                  <MetricCard label="Unit price" value={formatMoney(item.supplier.unit_price_usd, bangladeshMode)} />
                   <MetricCard label="MOQ" value={item.supplier.moq.toLocaleString()} />
                   <MetricCard label="Lead" value={`${item.supplier.lead_time_days}d`} />
                   <MetricCard label="Rating" value={`${(item.supplier.rating ?? item.supplier.quality_rating).toFixed(1)}/5`} />
-                  <MetricCard label="Risk" value={riskLabel(item.supplier.risk_score)} tone={riskTone(item.supplier.risk_score)} />
+                  <MetricCard label="Best for" value={supplierBestFor(item.supplier)} />
                   <MetricCard label="Confidence" value={item.discovery.confidence} />
                 </div>
 
@@ -772,13 +816,10 @@ export function SourcingChat() {
 
                 <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
                   <div className="flex flex-wrap gap-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => toggleShortlist(item.supplier.id)}
-                      className="rounded-lg border-black/10 bg-transparent text-[#16201d] hover:bg-[#f1ede3] hover:text-[#16201d]"
-                    >
-                      {shortlist.includes(item.supplier.id) ? "Shortlisted" : "Shortlist"}
+                    <Button asChild variant="outline" className="rounded-lg border-black/10 bg-transparent text-[#16201d] hover:bg-[#f1ede3] hover:text-[#16201d]">
+                      <Link href={`/app/compare?supplier=${item.supplier.id}`}>
+                        Profit view
+                      </Link>
                     </Button>
                     <Button
                       type="button"
@@ -808,18 +849,26 @@ export function SourcingChat() {
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#6d7a75]">Ranked suppliers</p>
-              <p className="mt-1 text-sm text-[#53605c]">
-                {displayedRanked.length > 0
-                  ? "Click a supplier to open the decision profile."
-                  : noAvailableSuppliersMessage ?? "Run a search to rank suppliers."}
-              </p>
+              {displayedRanked.length === 0 ? (
+                <p className="mt-1 text-sm text-[#53605c]">
+                  {noAvailableSuppliersMessage ? "No ranked suppliers for this search." : "Run a search to rank suppliers."}
+                </p>
+              ) : null}
             </div>
+            {displayedRanked.length > 0 ? (
             <Button asChild variant="outline" className="rounded-lg border-black/10 bg-transparent text-[#16201d] hover:bg-[#f1ede3] hover:text-[#16201d]">
-              <Link href="/app/compare">
+              <Link
+                href="/app/compare"
+                onClick={() => {
+                  persistWorkspaceSnapshot(selectedSupplier?.id ?? displayedRanked[0]?.supplier.id ?? null)
+                  markWorkspaceReturnIntent()
+                }}
+              >
                 <BarChart3 className="mr-2 h-4 w-4" />
                 Profit & simulation
               </Link>
             </Button>
+            ) : null}
           </div>
 
           {displayedRanked.length > 0 ? (
@@ -827,12 +876,7 @@ export function SourcingChat() {
               {displayedRanked.map((item, itemIndex) => (
                 <div
                   key={item.supplier.id}
-                  className={cn(
-                    "rounded-2xl border bg-[#fffdf9] p-4 transition hover:border-[#d9b44a]/70 hover:bg-white hover:shadow-md",
-                    selectedSupplier?.id === item.supplier.id
-                      ? "border-2 border-[#d9b44a] bg-white shadow-lg shadow-[#d9b44a]/15 ring-2 ring-[#d9b44a]/25"
-                      : "border-black/10",
-                  )}
+                  className="rounded-2xl border border-black/10 bg-[#fffdf9] p-4 transition hover:border-[#d9b44a]/70 hover:bg-white hover:shadow-md"
                 >
                   <Link
                     href={`/app/suppliers/${item.supplier.id}`}
@@ -841,9 +885,8 @@ export function SourcingChat() {
                       persistWorkspaceSnapshot(item.supplier.id)
                       markWorkspaceReturnIntent()
                     }}
-                    className="grid min-w-0 gap-3 sm:grid-cols-[112px_1fr]"
+                    className="grid min-w-0 gap-3"
                   >
-                    <ProductPreviewImage supplier={item.supplier} className="h-24 rounded-xl" />
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
@@ -861,23 +904,62 @@ export function SourcingChat() {
                       </span>
                     </div>
 
-                    <div className="grid grid-cols-4 gap-2 text-xs sm:col-start-2">
-                      <MiniMetric label="Unit" value={formatMoney(item.supplier.unit_price_usd, bangladeshMode)} />
+                    <div className="grid grid-cols-4 gap-2 text-xs">
+                      <MiniMetric label="Unit price" value={formatMoney(item.supplier.unit_price_usd, bangladeshMode)} />
                       <MiniMetric label="MOQ" value={item.supplier.moq.toLocaleString()} />
                       <MiniMetric label="Lead" value={`${item.supplier.lead_time_days}d`} />
-                      <MiniMetric label="Risk" value={riskLabel(item.supplier.risk_score)} />
+                      <MiniMetric label="Best for" value={supplierBestFor(item.supplier)} />
+                    </div>
+
+                    <div className="rounded-xl border border-black/10 bg-[#f7f4ec] p-3 text-sm leading-6 text-[#4e5a55]">
+                      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                        <span className="text-xs font-semibold uppercase tracking-[0.14em] text-[#7a5b0f]">
+                          Why this supplier
+                        </span>
+                        <span
+                          className={cn(
+                            "rounded-full px-2.5 py-1 text-xs font-semibold",
+                            supplierConfidenceLabel({
+                              confidence: item.discovery.confidence,
+                              fitScore: item.discovery.fit_score,
+                              resultQuality: result?.meta.result_quality,
+                            }).className,
+                          )}
+                        >
+                          {
+                            supplierConfidenceLabel({
+                              confidence: item.discovery.confidence,
+                              fitScore: item.discovery.fit_score,
+                              resultQuality: result?.meta.result_quality,
+                            }).label
+                          }
+                        </span>
+                      </div>
+                      {whySupplierWon({
+                        supplier: item.supplier,
+                        discovery: item.discovery,
+                        rank: itemIndex + 1,
+                        totalVisible: displayedRanked.length,
+                      })}
                     </div>
 
                   </Link>
 
                   <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-black/10 pt-3">
-                    <button
-                      type="button"
-                      onClick={() => toggleShortlist(item.supplier.id)}
-                      className="rounded-lg border border-black/10 px-3 py-1.5 text-xs font-medium text-[#16201d] transition hover:bg-[#f1ede3]"
-                    >
-                      {shortlist.includes(item.supplier.id) ? "Shortlisted" : "Shortlist"}
-                    </button>
+                    <span className="rounded-full bg-[#f1ede3] px-3 py-1.5 text-xs font-medium text-[#53605c]">
+                      Best for {supplierBestFor(item.supplier).toLowerCase()}
+                    </span>
+                    <div className="flex flex-wrap gap-2">
+                      <Link
+                        href={`/app/compare?supplier=${item.supplier.id}`}
+                        onClick={() => {
+                          persistWorkspaceSnapshot(item.supplier.id)
+                          markWorkspaceReturnIntent()
+                        }}
+                        className="inline-flex items-center rounded-lg border border-black/10 px-4 py-2 text-sm font-semibold text-[#16201d] transition hover:bg-[#f1ede3]"
+                      >
+                        Profit view
+                      </Link>
                     <Link
                       href={`/app/suppliers/${item.supplier.id}`}
                       onClick={() => {
@@ -889,6 +971,7 @@ export function SourcingChat() {
                       View profile
                       <ChevronRight className="ml-1 h-3.5 w-3.5" />
                     </Link>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -974,11 +1057,11 @@ function PreviewSupplierCard({ supplier, onSelect, bangladeshMode = false }: { s
       </div>
 
       <div className="mt-4 grid gap-2 sm:grid-cols-5">
-        <MetricCard label="Unit" value={formatMoney(supplier.unit_price_usd, bangladeshMode)} />
+        <MetricCard label="Unit price" value={formatMoney(supplier.unit_price_usd, bangladeshMode)} />
         <MetricCard label="MOQ" value={supplier.moq.toLocaleString()} />
         <MetricCard label="Lead" value={`${supplier.lead_time_days}d`} />
         <MetricCard label="Rating" value={`${(supplier.rating ?? supplier.quality_rating).toFixed(1)}/5`} />
-        <MetricCard label="Risk" value={riskLabel(supplier.risk_score)} tone={riskTone(supplier.risk_score)} />
+        <MetricCard label="Best for" value={supplierBestFor(supplier)} />
       </div>
 
       <div className="mt-3 flex flex-wrap gap-2">
@@ -1030,15 +1113,14 @@ function ProductOptionPreview({
   onSelectSize: (value: string | null) => void
 }) {
   return (
-    <div className="min-h-[360px] bg-[#16201d] p-4 text-[#f7f4ec] md:p-5 lg:min-h-[520px] lg:p-6">
-      <div className="space-y-5">
+    <div className="min-h-[360px] bg-[#16201d] p-3 text-[#f7f4ec] md:p-4 lg:min-h-[520px] lg:p-4">
+      <div className="space-y-3">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#d9b44a]">Product overview</p>
-          <h2 className="mt-2 font-serif text-3xl leading-none md:text-4xl">{visual.displayName}</h2>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#d9b44a]">Product overview - {visual.displayName}</p>
+          <p className="mt-1 text-sm text-[#cbd8d1]">Choose 1 type to continue.</p>
         </div>
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#d9b44a]">Choose type</p>
-          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-3 sm:grid-cols-2">
             {visual.variants.map((variant) => (
               <ProductVariantCard
                 key={variant.name}
@@ -1054,7 +1136,7 @@ function ProductOptionPreview({
 
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#d9b44a]">Size / pack</p>
-          <div className="mt-3 flex flex-wrap gap-2">
+          <div className="mt-2 flex flex-wrap gap-2">
             {visual.sizes.map((size) => (
               <button
                 key={size}
@@ -1070,14 +1152,6 @@ function ProductOptionPreview({
                 {size}
               </button>
             ))}
-          </div>
-        </div>
-
-        <div className="rounded-xl border border-white/12 bg-white/[0.06] p-4">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#d9b44a]">Sourcing suggestions</p>
-          <div className="mt-3 grid gap-2 text-sm leading-6 text-[#dbe5df] xl:grid-cols-2">
-            <p>Compare at least 4 suppliers before choosing one. A cheaper unit price can lose money if MOQ, shipping, or defects are high.</p>
-            <p>Start with the standard price band for realistic quotes, then use profit simulation to test low-cost and premium versions.</p>
           </div>
         </div>
 
@@ -1099,7 +1173,7 @@ function ProductVariantCard({
   selected: boolean
   onClick: () => void
 }) {
-  const image = getVariantPlaceholderImage(index)
+  const image = getProductVariantImage(product, variant.name, index)
 
   return (
     <div
@@ -1113,12 +1187,16 @@ function ProductVariantCard({
         }
       }}
       className={cn(
-        "group cursor-pointer overflow-hidden rounded-xl border bg-white/6 text-left transition hover:border-[#d9b44a]/70",
-        selected ? "border-[#d9b44a] bg-[#d9b44a]/12 shadow-lg shadow-black/20" : "border-white/12",
+        "group cursor-pointer overflow-hidden rounded-xl text-left shadow-sm transition hover:shadow-lg hover:shadow-black/25",
+        selected ? "ring-2 ring-[#d9b44a] ring-offset-2 ring-offset-[#16201d]" : "",
       )}
     >
-      <div className="relative h-36 overflow-hidden bg-[#ece7dc] sm:h-40 lg:h-48">
-        <img src={image.src} alt={`${variant.name} preview`} className="h-full w-full object-cover transition duration-300 group-hover:scale-105" loading="lazy" />
+      <div className="relative h-40 overflow-hidden bg-[#07100d] sm:h-44 lg:h-52">
+        <img src={image.src} alt={`${variant.name} preview`} className="absolute inset-0 h-full w-full object-contain object-center transition duration-300 group-hover:scale-[1.02]" loading="lazy" />
+        <div className="absolute inset-x-0 bottom-0 min-h-[30%] bg-gradient-to-t from-[#07100d]/92 via-[#07100d]/58 to-transparent p-3 pt-8">
+          <div className="text-sm font-semibold text-[#f7f4ec]">{variant.name}</div>
+          <p className="mt-0.5 text-xs leading-5 text-[#dbe5df]">{variant.detail}</p>
+        </div>
         <Dialog>
           <DialogTrigger asChild>
             <button
@@ -1138,49 +1216,6 @@ function ProductVariantCard({
           </DialogContent>
         </Dialog>
       </div>
-      <div className="space-y-1 p-3">
-        <div className="text-sm font-semibold text-[#f7f4ec]">{variant.name}</div>
-        <p className="text-xs leading-5 text-[#cbd8d1]">{variant.detail}</p>
-      </div>
-    </div>
-  )
-}
-
-function ProductPreviewImage({
-  supplier,
-  category,
-  product,
-  className,
-  variant = "card",
-}: {
-  supplier?: Supplier
-  category?: SupplierCategory
-  product?: string
-  className?: string
-  variant?: "card" | "compact" | "hero"
-}) {
-  const image = getProductImage({ supplier, category, product })
-  return (
-    <div className={cn("relative overflow-hidden bg-[#ece7dc]", className)}>
-      <img src={image.src} alt={image.alt} className="h-full w-full object-cover" loading="lazy" />
-      <div
-        className={cn(
-          "absolute inset-0 bg-gradient-to-t from-[#16201d]/75 via-transparent to-transparent",
-          variant === "card" && "hidden",
-        )}
-      />
-      {variant !== "card" && (
-        <div className={cn("absolute left-4 right-4", variant === "hero" ? "bottom-6" : "bottom-3")}>
-          <div className="inline-flex rounded-full bg-[#16201d]/82 px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.12em] text-[#f7f4ec]">
-            {image.credit}
-          </div>
-          {variant === "hero" && (
-            <h2 className="mt-3 max-w-xl font-serif text-5xl leading-none text-[#f7f4ec]">
-              {product ?? supplier?.products?.[0] ?? "Product preview"}
-            </h2>
-          )}
-        </div>
-      )}
     </div>
   )
 }

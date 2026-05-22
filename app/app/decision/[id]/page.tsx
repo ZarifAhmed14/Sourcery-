@@ -9,10 +9,11 @@ import {
   CircleDollarSign,
   ClipboardCheck,
   Factory,
-  Globe2,
   Mail,
   MapPin,
   PackageCheck,
+  Plane,
+  ShipWheel,
   Phone,
   ShieldAlert,
   Truck,
@@ -24,7 +25,7 @@ import { TermLabel } from "@/components/sourcery/term-help"
 import { formatMoney } from "@/lib/currency"
 import { getProductImage } from "@/lib/product-images"
 import { findDemoSupplier } from "@/lib/sourcery/demo-suppliers"
-import { enrichSupplierProfileFields } from "@/lib/sourcery/supplier-profile-enrichment"
+import { enrichSupplierProfileFields, inferSupplierLogisticsLane } from "@/lib/sourcery/supplier-profile-enrichment"
 import { normalizeSupplier } from "@/lib/sourcery/supplier-normalizer"
 import { getAdminClient, isAdminSupabaseConfigured } from "@/lib/supabase/admin"
 
@@ -133,7 +134,6 @@ type SupplierDecisionData = {
   supplier: ReturnType<typeof normalizeSupplier>
   metadata: { port?: string; sample_days?: number; incoterms?: string[] }
   paymentTerms: string
-  website: string | null
   contactName: string
   email: string | null
   phone: string | null
@@ -143,39 +143,28 @@ type SupplierDecisionData = {
 async function loadSupplierDecisionData(id: string): Promise<SupplierDecisionData | null> {
   const demo = findDemoSupplier(id)
 
-  if (!isAdminSupabaseConfigured()) {
-    if (!demo) return null
+  if (demo) {
     const enriched = enrichSupplierProfileFields({ supplier: demo })
     return {
       supplier: demo,
       metadata: enriched.metadata,
       paymentTerms: enriched.paymentTerms,
-      website: demo.source_url ?? null,
       contactName: "Sourcing desk",
       email: null,
       phone: null,
       contactRow: {},
     }
+  }
+
+  if (!isAdminSupabaseConfigured()) {
+    return null
   }
 
   const supabase = getAdminClient()
   const { data, error } = await supabase.from("suppliers").select("*").eq("id", id).maybeSingle()
   if (error) throw new Error(error.message)
 
-  if (!data) {
-    if (!demo) return null
-    const enriched = enrichSupplierProfileFields({ supplier: demo })
-    return {
-      supplier: demo,
-      metadata: enriched.metadata,
-      paymentTerms: enriched.paymentTerms,
-      website: demo.source_url ?? null,
-      contactName: "Sourcing desk",
-      email: null,
-      phone: null,
-      contactRow: {},
-    }
-  }
+  if (!data) return null
 
   const supplier = normalizeSupplier(data)
   const enriched = enrichSupplierProfileFields({
@@ -188,7 +177,6 @@ async function loadSupplierDecisionData(id: string): Promise<SupplierDecisionDat
     supplier,
     metadata: enriched.metadata,
     paymentTerms: enriched.paymentTerms,
-    website: typeof data.website === "string" && data.website.startsWith("http") ? data.website : supplier.source_url,
     contactName: typeof data.contact_name === "string" ? data.contact_name : "Sourcing desk",
     email: typeof data.email === "string" ? data.email : null,
     phone: typeof data.phone === "string" ? data.phone : null,
@@ -202,7 +190,7 @@ export default async function SupplierDecisionPage({ params }: { params: Promise
   const decisionData = await loadSupplierDecisionData(id)
   if (!decisionData) notFound()
 
-  const { supplier, metadata, paymentTerms, website, contactName, email, phone, contactRow } = decisionData
+  const { supplier, metadata, paymentTerms, contactName, email, phone, contactRow } = decisionData
   const image = getProductImage({ supplier })
   const incoterms = Array.isArray(metadata.incoterms) ? metadata.incoterms.map(String) : []
   const product = supplier.products?.[0] ?? supplier.subcategory
@@ -211,6 +199,7 @@ export default async function SupplierDecisionPage({ params }: { params: Promise
   const initialSpend = supplier.unit_price_usd * initialOrderUnits
   const reorderWindow = supplier.lead_time_days + 14
   const channel = preferredChannel(contactRow)
+  const logisticsLane = inferSupplierLogisticsLane({ supplier, metadata })
 
   return (
     <div className="space-y-6">
@@ -285,6 +274,33 @@ export default async function SupplierDecisionPage({ params }: { params: Promise
               <InfoTile label="Sample time" value={typeof metadata.sample_days === "number" ? `${metadata.sample_days} days` : "7 days"} />
             </div>
 
+            <div className="mt-4 rounded-xl border border-black/10 bg-[#f7f4ec] p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <span className="grid h-11 w-11 place-items-center rounded-full bg-[#16201d] text-[#f7f4ec]">
+                    <LogisticsIcon mode={logisticsLane.mode} />
+                  </span>
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#6d7a75]">{logisticsLane.modeLabel}</p>
+                    <h3 className="text-lg font-semibold text-[#16201d]">{logisticsLane.routeLabel}</h3>
+                  </div>
+                </div>
+                <div className="rounded-full bg-[#fff8df] px-3 py-1 text-xs font-semibold text-[#7a5b0f]">
+                  ETA {logisticsLane.etaLabel}
+                </div>
+              </div>
+
+              <div className="mt-4 grid gap-3 md:grid-cols-[1fr_auto_1fr] md:items-center">
+                <RouteStop label="Comes from" value={logisticsLane.originLabel} />
+                <div className="hidden justify-center md:flex">
+                  <ArrowRight className="h-5 w-5 text-[#7a857f]" />
+                </div>
+                <RouteStop label="Ends up at" value={logisticsLane.destinationLabel} detail={logisticsLane.destinationDetail} />
+              </div>
+
+              <p className="mt-4 text-sm leading-6 text-[#5d6965]">{logisticsLane.rationale}</p>
+            </div>
+
             <div className="mt-4 flex flex-wrap gap-2">
               {email && (
                 <Button asChild className="rounded-md bg-[#16201d] text-[#f7f4ec] hover:bg-[#22312d]">
@@ -302,14 +318,12 @@ export default async function SupplierDecisionPage({ params }: { params: Promise
                   </a>
                 </Button>
               )}
-              {website && (
-                <Button asChild variant="outline" className="rounded-md border-black/10 bg-transparent text-[#16201d] hover:bg-[#f1ede3]">
-                  <Link href={website} target="_blank" rel="noreferrer">
-                    <Globe2 className="mr-1.5 h-4 w-4" />
-                    Visit website
-                  </Link>
-                </Button>
-              )}
+              <Button asChild variant="outline" className="rounded-md border-black/10 bg-transparent text-[#16201d] hover:bg-[#f1ede3]">
+                <Link href={`/app/compare?supplier=${supplier.id}`}>
+                  <BarChart3 className="mr-1.5 h-4 w-4" />
+                  Profit & simulation
+                </Link>
+              </Button>
             </div>
           </Panel>
 
@@ -428,6 +442,22 @@ function DecisionMetric({ label, value }: { label: string; value: React.ReactNod
         <TermLabel label={label} />
       </div>
       <div className="mt-2 text-lg font-semibold text-[#16201d]">{value}</div>
+    </div>
+  )
+}
+
+function LogisticsIcon({ mode }: { mode: "ship" | "air" | "road" }) {
+  if (mode === "air") return <Plane className="h-5 w-5" />
+  if (mode === "road") return <Truck className="h-5 w-5" />
+  return <ShipWheel className="h-5 w-5" />
+}
+
+function RouteStop({ label, value, detail }: { label: string; value: string; detail?: string }) {
+  return (
+    <div className="rounded-lg border border-black/10 bg-white px-4 py-3">
+      <div className="text-xs uppercase tracking-[0.16em] text-[#6d7a75]">{label}</div>
+      <div className="mt-1 text-sm font-semibold text-[#16201d]">{value}</div>
+      {detail ? <p className="mt-1 text-xs leading-5 text-[#5d6965]">{detail}</p> : null}
     </div>
   )
 }

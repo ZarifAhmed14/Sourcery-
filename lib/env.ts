@@ -83,23 +83,53 @@ export function hasGeminiEnv(): boolean {
   return Boolean(readAnyEnv("GEMINI_API_KEY", "GOOGLE_GENERATIVE_AI_API_KEY"))
 }
 
+export function hasGroqEnv(): boolean {
+  return Boolean(readEnv("GROQ_API_KEY"))
+}
+
 export function getGeminiApiKey(): string {
   const value = readAnyEnv("GEMINI_API_KEY", "GOOGLE_GENERATIVE_AI_API_KEY")
   if (!value) throw new Error("Missing required environment variable: GEMINI_API_KEY or GOOGLE_GENERATIVE_AI_API_KEY")
   return value
 }
 
-export function getFreeAiProvider(): "gemini" | "pollinations" | "none" {
+export function getGroqApiKey(): string {
+  return requireEnv("GROQ_API_KEY")
+}
+
+export function getFreeAiProvider(): "groq" | "gemini" | "pollinations" | "none" {
   const provider = readEnv("AI_FREE_PROVIDER")
   if (provider === "none" || readEnv("AI_DISABLE_FREE_PROVIDER") === "1") return "none"
+  if (provider === "groq" && hasGroqEnv()) return "groq"
   if (provider === "gemini" && hasGeminiEnv()) return "gemini"
+  if (hasGroqEnv()) return "groq"
   return "pollinations"
 }
 
-export function getAiGenerationProvider(): "ai_sdk" | "gemini" | "pollinations" | "none" {
+export function getAiGenerationProvider(): "ai_sdk" | "groq" | "gemini" | "pollinations" | "none" {
   if (isAiDisabled()) return "none"
   if (hasPaidAiGenerationEnv()) return "ai_sdk"
   return getFreeAiProvider()
+}
+
+export function getSourceAiProvider(): "ai_sdk" | "groq" | "gemini" | "pollinations" | "none" {
+  const provider = readEnv("AI_SOURCE_PROVIDER")
+  if (provider === "none") return "none"
+  if (provider === "ai_sdk" && hasPaidAiGenerationEnv()) return "ai_sdk"
+  if (provider === "groq" && hasGroqEnv()) return "groq"
+  if (provider === "gemini" && hasGeminiEnv()) return "gemini"
+  if (provider === "pollinations") return "pollinations"
+  return getAiGenerationProvider()
+}
+
+export function getBargainAiProvider(): "ai_sdk" | "groq" | "gemini" | "pollinations" | "none" {
+  const provider = readEnv("AI_BARGAIN_PROVIDER")
+  if (provider === "none") return "none"
+  if (provider === "ai_sdk" && hasPaidAiGenerationEnv()) return "ai_sdk"
+  if (provider === "groq" && hasGroqEnv()) return "groq"
+  if (provider === "gemini" && hasGeminiEnv()) return "gemini"
+  if (provider === "pollinations") return "pollinations"
+  return getAiGenerationProvider()
 }
 
 export function isFreeSourceAiEnabled(): boolean {
@@ -134,6 +164,10 @@ export function getGeminiModel(): string {
   return readEnv("GEMINI_MODEL") ?? "gemini-2.5-flash"
 }
 
+export function getGroqModel(): string {
+  return readEnv("GROQ_MODEL") ?? "openai/gpt-oss-20b"
+}
+
 export function publicRuntimeStatus() {
   const generationProvider = getAiGenerationProvider()
   return {
@@ -148,5 +182,6 @@ export function publicRuntimeStatus() {
     freeProvider: getFreeAiProvider(),
     pollinationsModel: generationProvider === "pollinations" ? getPollinationsModel() : null,
     geminiModel: generationProvider === "gemini" ? getGeminiModel() : null,
+    groqModel: generationProvider === "groq" ? getGroqModel() : null,
   }
 }

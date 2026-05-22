@@ -43,9 +43,14 @@ export default async function HealthPage() {
       detail: embeddedCount && supplierCount ? `${embeddedCount}/${supplierCount} supplier profiles have embeddings.` : "Embedding count is not available.",
     },
     {
-      label: "Gemini generation",
-      status: runtime.aiGenerationProvider === "gemini" ? "pass" : "warn",
-      detail: runtime.aiGenerationProvider === "gemini" ? "Free Gemini provider is selected for demo generation." : `Current provider: ${runtime.aiGenerationProvider}.`,
+      label: "AI generation",
+      status: runtime.aiGenerationProvider === "groq" || runtime.aiGenerationProvider === "gemini" ? "pass" : "warn",
+      detail:
+        runtime.aiGenerationProvider === "groq"
+          ? "Groq is selected for structured supplier ranking and generation."
+          : runtime.aiGenerationProvider === "gemini"
+            ? "Gemini is selected for demo generation."
+            : `Current provider: ${runtime.aiGenerationProvider}.`,
     },
     {
       label: "Demo reliability",
