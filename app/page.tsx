@@ -45,7 +45,7 @@ export default function HomePage() {
         <div className="grid items-center gap-12 lg:grid-cols-[0.9fr_1.1fr]">
           <div className="relative z-10 max-w-2xl">
             <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#7a5b0f]">Supplier intelligence for faster buying</p>
-            <h1 className="mt-5 font-serif text-6xl leading-[1.04] tracking-[-0.045em] text-[#13201b] md:text-7xl lg:text-[5.35rem]">
+            <h1 className="mt-5 font-serif font-[550] text-6xl leading-[1.04] tracking-[-0.045em] text-[#13201b] md:text-7xl lg:text-[5.35rem]">
               Find the right supplier
               <br />
               before you place

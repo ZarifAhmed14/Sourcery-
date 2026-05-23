@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs"
+import { existsSync, readFileSync } from "node:fs"
 import { join } from "node:path"
 import { normalizeSupplier, supplierSearchHaystack } from "@/lib/sourcery/supplier-normalizer"
 import type { Supplier, SupplierCategory } from "@/lib/types"
@@ -14,16 +14,21 @@ function supplierDedupKey(supplier: Supplier): string {
 }
 
 function loadDatasetRows(): SupplierDatasetRow[] {
-  const datasetPath = join(
-    process.cwd(),
-    "outputs",
-    "supplier-dataset",
-    "sourcery_supplier_dataset_actual_names.json",
-  )
-  const raw = readFileSync(datasetPath, "utf-8")
-  const parsed = JSON.parse(raw) as SupplierDatasetRow[]
-  if (!Array.isArray(parsed)) return []
-  return parsed
+  const candidatePaths = [
+    join(process.cwd(), "lib", "sourcery", "data", "sourcery_supplier_dataset_actual_names.json"),
+    join(process.cwd(), "outputs", "supplier-dataset", "sourcery_supplier_dataset_actual_names.json"),
+  ]
+
+  const datasetPath = candidatePaths.find((path) => existsSync(path))
+  if (!datasetPath) return []
+
+  try {
+    const raw = readFileSync(datasetPath, "utf-8")
+    const parsed = JSON.parse(raw) as SupplierDatasetRow[]
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
 }
 
 function getDatasetSuppliers(): Supplier[] {

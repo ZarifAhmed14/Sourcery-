@@ -1,4 +1,4 @@
-﻿import { readFile, writeFile } from "node:fs/promises"
+import { mkdir, readFile, writeFile } from "node:fs/promises"
 import path from "node:path"
 
 const baseUrl = process.env.REGRESSION_BASE_URL ?? "http://127.0.0.1:3000"
@@ -44,6 +44,7 @@ async function main() {
   }
 
   const reportPath = path.join(process.cwd(), "outputs", "supplier-dataset", "source_regression_report.json")
+  await mkdir(path.dirname(reportPath), { recursive: true })
   await writeFile(reportPath, JSON.stringify({ baseUrl, generatedAt: new Date().toISOString(), results }, null, 2))
   console.log(JSON.stringify({ ok: true, baseUrl, results, reportPath }, null, 2))
 }

@@ -33,7 +33,9 @@ export async function GET(req: Request) {
     if (input.region) query = query.eq("region", input.region)
 
     const { data, error, count } = await query
-    if (error) throw new Error(error.message)
+    if (error) {
+      return okJson({ ...demo, limit, offset, source: "demo_fallback" })
+    }
     let suppliers = (data ?? []).map((row) => normalizeSupplier(row))
 
     if (input.category) suppliers = suppliers.filter((supplier) => supplier.category === input.category)
