@@ -46,17 +46,15 @@ export default function HomePage() {
           <div className="relative z-10 max-w-2xl">
             <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#7a5b0f]">Supplier intelligence for faster buying</p>
             <h1 className="mt-5 font-serif text-6xl leading-[1.04] tracking-[-0.045em] text-[#13201b] md:text-7xl lg:text-[5.35rem]">
-              Source suppliers
+              Find the right supplier
               <br />
-              with margin,
+              before you place
               <br />
-              risk, and readiness
-              <br />
-              intelligence.
+              the order.
             </h1>
 
             <p className="mt-8 max-w-xl text-xl leading-[1.65] tracking-[-0.01em] text-[#5f6b67] md:text-2xl">
-              Built for small and growing brands that need faster supplier decisions without sacrificing margin or reliability.
+              See price, risk, and profit clearly before you choose a supplier.
             </p>
 
             <div className="mt-10 flex flex-wrap items-center gap-4">
