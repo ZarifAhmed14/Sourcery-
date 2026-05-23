@@ -290,9 +290,31 @@ export function SourcingChat() {
     setSelectedId(null)
   }
 
+  const shouldRestoreWorkspaceOnLoad = () => {
+    if (typeof window === "undefined") return false
+
+    const explicitReturnIntent = consumeWorkspaceReturnIntent()
+    if (explicitReturnIntent) return true
+
+    const navigationEntry = window.performance
+      .getEntriesByType("navigation")
+      .find((entry): entry is PerformanceNavigationTiming => entry instanceof PerformanceNavigationTiming)
+
+    if (navigationEntry?.type === "back_forward") return true
+
+    try {
+      if (!document.referrer) return false
+      const referrer = new URL(document.referrer)
+      if (referrer.origin !== window.location.origin) return false
+      return /^\/app\/(suppliers\/|compare|decision\/)/.test(referrer.pathname)
+    } catch {
+      return false
+    }
+  }
+
   useEffect(() => {
     const savedState = readWorkspaceState()
-    const shouldRestoreWorkspace = consumeWorkspaceReturnIntent()
+    const shouldRestoreWorkspace = shouldRestoreWorkspaceOnLoad()
 
     if (savedState && shouldRestoreWorkspace) {
       setHasSearched(Boolean(savedState.hasSearched))
