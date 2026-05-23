@@ -4,16 +4,11 @@
 "use client"
 
 // One-time effect to log the caught error.
-import { useEffect } from "react"
 // Reusable Button component.
 import { Button } from "@/components/ui/button"
 
 // Receives `error` and `reset` from Next.js App Router.
-export default function RootError({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
-  // Log once on first render for observability.
-  useEffect(() => {
-    console.log("[v0] root error boundary caught:", error.message, error.digest)
-  }, [error])
+export default function RootError({ reset }: { error: Error & { digest?: string }; reset: () => void }) {
 
   return (
     // Centered editorial card — matches the landing-page palette.

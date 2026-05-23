@@ -1,6 +1,6 @@
 ﻿"use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { ArrowRight, BadgeCheck, MapPin, Search, Sparkles } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -27,17 +27,33 @@ export function SupplierDirectoryBrowser() {
   const [query, setQuery] = useState("")
   const [category, setCategory] = useState<SupplierCategory | "all">("all")
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [status, setStatus] = useState<"loading" | "ready" | "error">("loading")
+  const [error, setError] = useState<string | null>(null)
   const { bangladeshMode } = usePreferences()
 
-  useEffect(() => {
-    void fetch("/api/suppliers?limit=50")
-      .then((res) => res.json())
+  const loadSuppliers = useCallback(() => {
+    setStatus("loading")
+    setError(null)
+    void fetch("/api/suppliers?limit=1000")
+      .then((res) => {
+        if (!res.ok) throw new Error(`Supplier directory failed (${res.status})`)
+        return res.json()
+      })
       .then((data: SupplierListResponse) => {
         setSuppliers(data.suppliers ?? [])
         setSelectedId((current) => current ?? data.suppliers?.[0]?.id ?? null)
+        setStatus("ready")
       })
-      .catch(() => setSuppliers([]))
+      .catch((err) => {
+        setSuppliers([])
+        setError((err as Error).message || "Supplier directory could not load.")
+        setStatus("error")
+      })
   }, [])
+
+  useEffect(() => {
+    loadSuppliers()
+  }, [loadSuppliers])
 
   const filtered = useMemo(() => {
     const lowered = query.trim().toLowerCase()
@@ -112,6 +128,24 @@ export function SupplierDirectoryBrowser() {
               <div className="text-sm text-[#53605c]">{supplierDeliveryFit(supplier)}</div>
             </div>
           ))}
+          {status === "loading" ? (
+            <div className="border-t border-black/10 px-4 py-10 text-center text-sm text-[#6d7a75]">
+              Loading suppliers...
+            </div>
+          ) : null}
+          {status === "error" ? (
+            <div className="border-t border-black/10 px-4 py-10 text-center text-sm text-[#6d7a75]">
+              <p>{error ?? "Supplier directory could not load."}</p>
+              <Button type="button" onClick={loadSuppliers} className="mt-3 rounded-full bg-[#16201d] text-[#f7f4ec] hover:bg-[#24332f]">
+                Retry
+              </Button>
+            </div>
+          ) : null}
+          {status === "ready" && filtered.length === 0 ? (
+            <div className="border-t border-black/10 px-4 py-10 text-center text-sm text-[#6d7a75]">
+              No suppliers match this search. Try a company name, city, product, or a broader category.
+            </div>
+          ) : null}
         </div>
       </section>
 

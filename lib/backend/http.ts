@@ -59,7 +59,6 @@ export function handleApiError(err: unknown, fallback = "Request failed.") {
   if (err instanceof ApiRequestError) {
     return errorJson(err.code, err.message, err.status)
   }
-  const message = err instanceof Error ? err.message : fallback
-  console.log("[sourcery] api error:", message)
+  void err
   return errorJson("INTERNAL_ERROR", fallback, 500)
 }

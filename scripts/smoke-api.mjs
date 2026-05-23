@@ -109,7 +109,7 @@ async function main() {
     body: JSON.stringify({
       query: "Find Bangladesh jute bag suppliers for export",
       bangladeshMode: true,
-      topK: 3,
+      topK: 4,
     }),
   })
   if (!Array.isArray(source.suppliers) || source.suppliers.length === 0) {

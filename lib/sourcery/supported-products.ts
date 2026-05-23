@@ -27,6 +27,17 @@ export function isSupportedProduct(category: SupplierCategory, product?: string 
   return productsForCategory(category).some((item) => item.toLowerCase() === normalized)
 }
 
+export function inferSupportedProduct(category: SupplierCategory, query: string): string | null {
+  const normalized = query.toLowerCase()
+  const scored = productsForCategory(category).map((product) => {
+    const words = product.toLowerCase().split(/\s+/).filter((word) => word.length >= 3)
+    const exact = normalized.includes(product.toLowerCase()) ? 10 : 0
+    const matches = words.filter((word) => normalized.includes(word)).length
+    return { product, score: exact + matches }
+  })
+  return scored.sort((a, b) => b.score - a.score)[0]?.score > 0 ? scored[0].product : null
+}
+
 export function supportedProductHelpText(): string {
   return SUPPORTED_PRODUCT_CATALOG.map((item) => `${item.label}: ${item.products.join(", ")}`).join(" | ")
 }

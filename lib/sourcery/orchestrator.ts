@@ -5,7 +5,7 @@ import { ApiRequestError } from "@/lib/backend/http"
 import { getSourceAiProvider, isFreeSourceAiEnabled } from "@/lib/env"
 import { buildCacheKey, getCached, setCached } from "@/lib/sourcery/cache"
 import { detectCategory, retrieveCandidates, rescoreForBangladeshMode, type RetrievalMode } from "@/lib/sourcery/retrieval"
-import { isSupportedProduct, supportedProductHelpText } from "@/lib/sourcery/supported-products"
+import { inferSupportedProduct, isSupportedProduct, supportedProductHelpText } from "@/lib/sourcery/supported-products"
 import { recordSourceEvent } from "@/lib/sourcery/telemetry"
 import { BANGLADESH_MODE_PROMPT } from "@/lib/prompts/system"
 import type { ApiMeta, Supplier, SupplierCategory, SupplierRegion } from "@/lib/types"
@@ -64,7 +64,7 @@ type CombinedAgentOutput = {
   comparison: ComparisonItem[]
 }
 
-const RANKING_VERSION = "v2-lite"
+const RANKING_VERSION = "v4-audit-hardening-4"
 
 const LiteRankingItemSchema = z.object({
   supplier_id: z.string().min(2),
@@ -107,6 +107,7 @@ const LITE_RANKING_JSON_SCHEMA = {
 
 const UNSUPPORTED_DEMO_QUERY =
   /\b(electronic|electronics|sensor|sensors|module|modules|pcb|bluetooth|smart device|charger|earbud|power bank|adapter)\b/i
+const BAD_EXPLANATION_START = /^this supplier was selected\b/i
 
 function leanSupplier(supplier: Supplier) {
   return {
@@ -160,9 +161,10 @@ function buildLiteRankingPrompt(query: string, candidates: Supplier[], banglades
     "Rank every supplier from best to worst for this buyer brief.",
     "Return strict JSON only with one rankings[] item for every supplier.",
     "Use supplier_id exactly as provided. Do not invent or omit suppliers.",
-    "fit_summary: one short sentence on why the supplier fits.",
+    "fit_summary: Write one to two sentences explaining why this supplier ranks here for this buyer's search. Be specific to the supplier's actual data - mention their MOQ, lead time, price, or certifications only if they are genuinely relevant to the search. Do not start with 'This supplier was selected because'. Do not copy the best_for field. Write like a procurement advisor giving a quick honest take, not a system generating a report. If there is a tradeoff the buyer should know about, mention it plainly.",
     "watchout: one short sentence on the main caution.",
-    "Mention concrete numbers when helpful, especially MOQ, lead time, price, quality rating, or on-time rate.",
+    "Keep fit_summary concise: 1-2 sentences, maximum 220 characters.",
+    "Use varied language across supplier cards.",
     `BUYER_BRIEF:\n${query}`,
     bangladeshMode ? BANGLADESH_MODE_PROMPT : "",
     buyerFilters,
@@ -172,7 +174,7 @@ function buildLiteRankingPrompt(query: string, candidates: Supplier[], banglades
     {
       "supplier_id": "<id>",
       "rank": 1,
-      "fit_summary": "Strong balance of price and lead time for the brief.",
+      "fit_summary": "Beximco's MOQ suits mid-size brands; pricing is solid, but plan around the longer lead time for seasonal orders.",
       "watchout": "MOQ is 1500 units, so it is better for established demand."
     }
   ]
@@ -206,6 +208,105 @@ function discoveryConfidence(score: number): "high" | "medium" | "low" {
   if (score >= 78) return "high"
   if (score >= 55) return "medium"
   return "low"
+}
+
+function supplierBestForLabel(supplier: Supplier): string {
+  if (supplier.moq <= 400) return "small test orders"
+  if (supplier.lead_time_days <= 22) return "fast restocks"
+  if (supplier.unit_price_usd <= 2.5) return "margin-first buying"
+  if ((supplier.rating ?? supplier.quality_rating) >= 4.6) return "premium quality"
+  if (supplier.bgmea_certified) return "compliance-sensitive sourcing"
+  if (supplier.country === "Bangladesh") return "local Bangladesh sourcing"
+  return "balanced sourcing"
+}
+
+function trimToSentences(text: string): string {
+  return text
+    .replace(/\s+/g, " ")
+    .trim()
+    .split(/(?<=[.!?])\s+/)
+    .slice(0, 2)
+    .join(" ")
+    .slice(0, 220)
+    .trim()
+}
+
+function hasBadExplanation(explanation: string, supplier: Supplier): boolean {
+  const normalized = explanation.trim().toLowerCase()
+  const bestFor = supplierBestForLabel(supplier).toLowerCase()
+  return !normalized || BAD_EXPLANATION_START.test(normalized) || normalized.includes(bestFor)
+}
+
+function buildBuyerExplanation(supplier: Supplier, query: string, rank?: number): string {
+  const product = supplier.products?.[0] ?? supplier.subcategory
+  const queryMentionsSpeed = /\b(fast|rush|quick|urgent|restock|short lead|lead under|under \d+ days)\b/i.test(query)
+  const queryMentionsPrice = /\b(price|cheap|budget|margin|low cost|unit price|target)\b/i.test(query)
+  const queryMentionsCompliance = /\b(cert|certified|compliance|bgmea|bsci|oeko|sedex|audit|gots)\b/i.test(query)
+  const queryMentionsBangladesh = /\b(bangladesh|bd|dhaka|local|south asia)\b/i.test(query)
+  const isDenimSearch = /\b(denim|jeans)\b/i.test(query)
+
+  if (queryMentionsSpeed && supplier.lead_time_days <= 35) {
+    return `${supplier.name} is useful for ${product} when timing matters; the ${supplier.lead_time_days}-day lead time keeps the order moving without an unusually long production window.`
+  }
+  if (queryMentionsSpeed && supplier.lead_time_days > 45) {
+    if (rank === 2) {
+      return `${supplier.name} is worth comparing on ${product} if the buyer can trade speed for factory fit. The ${supplier.lead_time_days}-day lead needs calendar room before launch.`
+    }
+    if (rank === 3) {
+      return `${supplier.name} stays in the shortlist for ${product} because the profile is relevant, but it is not a rush-order pick with a ${supplier.lead_time_days}-day lead.`
+    }
+    if (rank && rank > 3) {
+      return `${supplier.name} gives the buyer another credible ${product} option, though the ${supplier.lead_time_days}-day lead means it belongs in planned production rather than quick restock.`
+    }
+    return `${supplier.name} has relevant ${product} capability, but the ${supplier.lead_time_days}-day lead time is the tradeoff. Use it for planned orders, not urgent replenishment.`
+  }
+  if (supplier.lead_time_days <= 28) {
+    return `${supplier.name} stands out on speed for ${product}: a ${supplier.lead_time_days}-day lead time gives the buyer more room for sampling, inspection, and restock planning.`
+  }
+  if (queryMentionsCompliance && supplier.certifications.length > 0) {
+    return `${supplier.name} brings useful certification coverage (${supplier.certifications.slice(0, 2).join(", ")}), which helps when the buyer needs a cleaner compliance conversation.`
+  }
+  if (queryMentionsPrice || supplier.unit_price_usd <= 3) {
+    return `${supplier.name} gives the buyer more pricing room at $${supplier.unit_price_usd}/unit, leaving space for freight, packaging, and resale margin.`
+  }
+  if (supplier.moq <= 600) {
+    return `${supplier.name}'s MOQ of ${supplier.moq.toLocaleString()} makes it easier to test ${product} before committing to a larger production run.`
+  }
+  if (isDenimSearch && supplier.moq >= 3000 && rank === 1) {
+    return `${supplier.name}'s MOQ suits mid-size denim programs; the main tradeoff is planning around lead time, so it fits seasonal orders better than rush replenishment.`
+  }
+  if (isDenimSearch && supplier.unit_price_usd <= 7.3) {
+    return `${supplier.name} comes in cheaper per unit than many Bangladesh denim options. Worth comparing side by side if the buyer can stay flexible on lead time.`
+  }
+  if (isDenimSearch && supplier.lead_time_days <= 55) {
+    return `${supplier.name} has one of the shorter production windows in this denim set, which helps if the buyer wants a large order without waiting as long.`
+  }
+  if (isDenimSearch && supplier.risk_score <= 15) {
+    return `${supplier.name} keeps risk comparatively low for a larger denim order; confirm wash approvals and inspection steps before scaling.`
+  }
+  if (isDenimSearch && supplier.certifications.some((cert) => /sedex|bsci|oeko/i.test(cert))) {
+    return `${supplier.name} brings useful factory-readiness signals for denim sourcing; ask for current audit and fabric documentation before quoting.`
+  }
+  if (supplier.moq >= 3000) {
+    return `${supplier.name}'s MOQ of ${supplier.moq.toLocaleString()} suits buyers with proven demand; pair it with sample and wash approval before placing a seasonal order.`
+  }
+  if (supplier.quality_rating >= 4.5 || (supplier.rating ?? 0) >= 4.5) {
+    return `${supplier.name} is strongest when product consistency matters, with quality signals that make it worth comparing before choosing the cheapest quote.`
+  }
+  if (queryMentionsBangladesh && supplier.country === "Bangladesh") {
+    return `${supplier.name} keeps the search local in Bangladesh, which should make sampling, follow-up, and supplier coordination easier for this brief.`
+  }
+  if (supplier.risk_score <= 30) {
+    return `${supplier.name} has fewer operational warning signs than many alternatives, so it is a practical profile to review early in the shortlist.`
+  }
+
+  return `${supplier.name} gives the buyer a workable comparison point for ${product}, especially if they want to balance supplier fit before deciding who to contact.`
+}
+
+function safeSupplierExplanation(supplier: Supplier, query: string, explanation?: string | null, rank?: number): string {
+  const cleaned = trimToSentences(explanation ?? "")
+  if (!hasBadExplanation(cleaned, supplier)) return cleaned
+  return buildBuyerExplanation(supplier, query, rank)
 }
 
 function riskFlags(supplier: Supplier, bangladeshMode: boolean): string[] {
@@ -279,7 +380,7 @@ function buildDeterministicOutput(suppliers: Supplier[], query: string, banglade
     supplier_id: supplier.id,
     rank: index + 1,
     fit_score: fit,
-    explanation: `${supplier.name} fits with ${supplier.on_time_rate}% on-time delivery, ${supplier.lead_time_days}-day lead time, and ${supplier.moq} MOQ.`,
+    explanation: buildBuyerExplanation(supplier, query, index + 1),
     key_factors: rankingKeyFactors(supplier),
     confidence: discoveryConfidence(fit),
     confidence_reason: `Data-ranked from supplier data using ${supplier.quality_rating}/5 quality, ${supplier.risk_score}/100 risk, MOQ, and lead time signals.`,
@@ -328,7 +429,7 @@ function buildAiGuidedOutput(rankings: LiteRankingResponse, suppliers: Supplier[
       supplier_id: supplier.id,
       rank: index + 1,
       fit_score: fit,
-      explanation: ranking.fit_summary,
+      explanation: safeSupplierExplanation(supplier, query, ranking.fit_summary, index + 1),
       key_factors: rankingKeyFactors(supplier, ranking.watchout),
       confidence: discoveryConfidence(fit),
       confidence_reason: "AI-ranked using the buyer brief, then grounded by backend supplier metrics.",
@@ -356,7 +457,9 @@ function deriveResultQuality(args: {
   llmMode: "ai" | "deterministic_fallback"
   supplierCount: number
   confidence: "high" | "medium" | "low"
+  relaxed: boolean
 }): ApiMeta["result_quality"] {
+  if (args.relaxed) return "standard"
   if (args.supplierCount <= 2) return "limited_supplier_pool"
   if (args.llmMode === "deterministic_fallback") return "rules_based_fallback"
   if (args.confidence === "high") return "high_confidence"
@@ -370,17 +473,46 @@ async function callLiteRankingAgent(
   buyerFilters: string,
   providerOverride: AiGenerationProvider,
 ): Promise<{ output: LiteRankingResponse; provider: Exclude<AiGenerationProvider, "none"> }> {
-  return generateStructuredObject({
-    system: [
-      "You are Sourcery's sourcing ranking analyst.",
-      "Return valid JSON only.",
-      "Rank every supplier exactly once and keep summaries concise.",
-    ].join("\n"),
-    prompt: buildLiteRankingPrompt(query, suppliers, bangladeshMode, buyerFilters),
+  const system = [
+    "You are Sourcery's sourcing ranking analyst.",
+    "Return valid JSON only.",
+    "Rank every supplier exactly once and keep summaries concise.",
+  ].join("\n")
+  const prompt = buildLiteRankingPrompt(query, suppliers, bangladeshMode, buyerFilters)
+  const result = await generateStructuredObject({
+    system,
+    prompt,
     maxOutputTokens: 1800,
     schema: LiteRankingResponseSchema,
     jsonSchema: LITE_RANKING_JSON_SCHEMA,
     providerOverride,
+  })
+
+  if (!hasInvalidGeneratedExplanations(result.output, suppliers)) return result
+
+  return generateStructuredObject({
+    system: [
+      system,
+      "Your previous supplier explanations copied a label or used banned template wording.",
+      "Rewrite fit_summary values as procurement-advisor advice. Do not start with 'This supplier was selected because'. Do not copy any best_for-style label.",
+      "Return valid JSON only.",
+    ].join("\n"),
+    prompt: [
+      prompt,
+      "Regenerate the full rankings object once. Keep the same supplier IDs and rank every supplier exactly once.",
+    ].join("\n\n"),
+    maxOutputTokens: 1800,
+    schema: LiteRankingResponseSchema,
+    jsonSchema: LITE_RANKING_JSON_SCHEMA,
+    providerOverride,
+  })
+}
+
+function hasInvalidGeneratedExplanations(rankings: LiteRankingResponse, suppliers: Supplier[]): boolean {
+  const byId = new Map(suppliers.map((supplier) => [supplier.id, supplier]))
+  return rankings.rankings.some((ranking) => {
+    const supplier = byId.get(ranking.supplier_id)
+    return !supplier || hasBadExplanation(ranking.fit_summary, supplier)
   })
 }
 
@@ -403,8 +535,7 @@ async function runAgentWithFallback(args: {
       mode: "ai",
       provider: ranked.provider,
     }
-  } catch (err) {
-    console.log("[sourcery] AI agent fallback:", (err as Error).message)
+  } catch {
     return { output: fallback, mode: "deterministic_fallback", provider: "none" }
   }
 }
@@ -417,6 +548,7 @@ function buildResult(args: {
   cached: boolean
   requestId: string
   retrievalMode: RetrievalMode
+  relaxedFilters: boolean
   llmMode: "ai" | "deterministic_fallback"
   aiProvider: AiGenerationProvider
   startedAt: number
@@ -445,7 +577,9 @@ function buildResult(args: {
         llmMode: args.llmMode,
         supplierCount: args.suppliers.length,
         confidence,
+        relaxed: args.relaxedFilters,
       }),
+      relaxed_filters: args.relaxedFilters,
       ranking_version: RANKING_VERSION,
       elapsed_ms: Date.now() - args.startedAt,
     },
@@ -470,7 +604,8 @@ export async function runSourcingOrchestrator(args: {
 }): Promise<SourcingResult> {
   const startedAt = Date.now()
   const detectedCategory = args.category ?? detectCategory(args.query)
-  if (UNSUPPORTED_DEMO_QUERY.test(args.query) || !detectedCategory || !isSupportedProduct(detectedCategory, args.product)) {
+  const effectiveProduct = detectedCategory ? args.product ?? inferSupportedProduct(detectedCategory, args.query) : args.product
+  if (UNSUPPORTED_DEMO_QUERY.test(args.query) || !detectedCategory || !isSupportedProduct(detectedCategory, effectiveProduct)) {
     throw new ApiRequestError(
       "BAD_REQUEST",
       `This demo workspace is locked to supported product paths. Please choose one category/product chip first. Supported paths: ${supportedProductHelpText()}`,
@@ -492,7 +627,7 @@ export async function runSourcingOrchestrator(args: {
     bangladeshMode: args.bangladeshMode,
     topK,
     category: detectedCategory,
-    product: args.product,
+    product: effectiveProduct,
     country: args.country,
     region: args.region,
     targetUnitPriceMin: args.targetUnitPriceMin,
@@ -518,7 +653,7 @@ export async function runSourcingOrchestrator(args: {
   }
 
   const retrieval = await retrieveCandidates(args.query, 20, detectedCategory, {
-    product: args.product,
+    product: effectiveProduct,
     country: args.country,
     region: args.region,
     targetUnitPriceMin: args.targetUnitPriceMin,
@@ -565,6 +700,7 @@ export async function runSourcingOrchestrator(args: {
     cached: false,
     requestId,
     retrievalMode: retrieval.mode,
+    relaxedFilters: retrieval.relaxed,
     llmMode: agent.mode,
     aiProvider: agent.provider,
     startedAt,

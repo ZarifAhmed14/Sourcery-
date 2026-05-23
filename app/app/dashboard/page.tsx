@@ -30,8 +30,7 @@ export default async function DashboardPage() {
   const supabase = await createClient()
   const {
     data: { user },
-  } = await supabase.auth.getUser().catch((error) => {
-    console.log("[sourcery] dashboard auth skipped:", error.message)
+  } = await supabase.auth.getUser().catch(() => {
     return { data: { user: null } }
   })
 
@@ -48,7 +47,6 @@ export default async function DashboardPage() {
   let rows = ((data ?? []) as unknown) as SavedSearchRow[]
 
   if (error) {
-    console.log("[sourcery] dashboard saved_searches canonical read failed:", error.message)
     const legacy = await supabase
       .from("saved_searches")
       .select("id, query, filters, results_snapshot, created_at")

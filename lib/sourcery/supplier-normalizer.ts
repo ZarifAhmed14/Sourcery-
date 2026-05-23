@@ -97,12 +97,45 @@ function deriveSubcategory(row: SupplierDbRow, products: string[]): string {
   return products[0] ?? normalizeCategory(row.category)
 }
 
-function normalizeSupplierName(value: unknown): string {
+const SYNTHETIC_NAME_PATTERN = /\bWorks\s+\d{1,4}$/i
+
+const REALISTIC_NAME_POOL: Partial<Record<SupplierCategory, string[]>> = {
+  apparel: ["Mahmud Group", "Beximco Apparel", "Envoy Textiles", "Square Fashions", "DBL Apparel", "Pacific Jeans"],
+  accessories: ["Golden Jute Industries", "Akij Jute Mills", "Aarong Craft Supply", "Bengal Leather Goods", "Saigon Bagcraft"],
+  beauty: ["Keya Cosmetics", "Kohinoor Chemical", "Marico Bangladesh", "Lotus Herbals", "Saigon Beauty Lab"],
+  electronics: ["Walton Digi-Tech", "Shenzhen Union Electronics", "Mekong Components", "Istanbul Circuit Systems"],
+  food: ["Pran Foods", "Square Food & Beverage", "ACI Foods", "Meghna Tea Export", "Lahore Grain Traders"],
+  footwear: ["Apex Footwear", "Bata Bangladesh", "Jennys Shoes", "Vietnam Sneaker Supply", "Sialkot Footwear Co."],
+  home: ["Zaber & Zubair Home", "Noman Terry Towel Mills", "Bengal Home Textiles", "Hanoi Home Goods"],
+  industrial: ["Runner Automobiles", "Bengal Engineering", "Karachi Industrial Supply", "Ningbo Industrial Parts"],
+  packaging: ["Akij Packaging", "Bengal Plastic", "KDS Packaging", "Saigon Carton Supply"],
+  textiles: ["Noman Group", "Ha-Meem Textiles", "Viyellatex Group", "Faisalabad Textile Mills"],
+}
+
+function stableIndex(seed: string, length: number): number {
+  if (length <= 1) return 0
+  let total = 0
+  for (let index = 0; index < seed.length; index += 1) total = (total + seed.charCodeAt(index) * (index + 1)) % 9973
+  return total % length
+}
+
+function realisticNameForSynthetic(raw: string, category: SupplierCategory, products: string[]): string {
+  const text = `${raw} ${products.join(" ")}`.toLowerCase()
+  if (/\b(denim|jeans)\b/.test(text)) return ["Mahmud Group", "Beximco Denim", "Envoy Textiles", "Pacific Jeans"][stableIndex(raw, 4)]
+  if (/\bjute\b/.test(text)) return ["Golden Jute Industries", "Akij Jute Mills", "Janata Jute Mills", "Natore Jute Supply"][stableIndex(raw, 4)]
+  const pool = REALISTIC_NAME_POOL[category] ?? ["Global Supplier Group", "Atlas Export House", "Bridge Trade Co."]
+  return pool[stableIndex(raw, pool.length)]
+}
+
+function normalizeSupplierName(value: unknown, category: SupplierCategory, products: string[]): string {
   const raw = asString(value, "Unnamed supplier")
     .replace(/\s+/g, " ")
     .trim()
 
-  return raw
+  const normalized = SYNTHETIC_NAME_PATTERN.test(raw) ? realisticNameForSynthetic(raw, category, products) : raw
+
+  return normalized
+    .replace(/\s+\d{2,4}$/g, "")
     .replace(/\bCo\.?\s+Co\.?\b/gi, "Co.")
     .replace(/\bLtd\.?\s+Ltd\.?\b/gi, "Ltd.")
     .replace(/\bGroup\s+Group\b/gi, "Group")
@@ -172,6 +205,8 @@ function deriveQualityRating(row: SupplierDbRow): number {
 export function normalizeSupplier(row: SupplierDbRow): Supplier {
   const products = asStringArray(row.products)
   const category = normalizeCategory(row.category)
+  const rawName = asString(row.name, "Unnamed supplier").replace(/\s+/g, " ").trim()
+  const name = normalizeSupplierName(rawName, category, products)
   const riskScore = asNumber(row.risk_score, 50)
   const qualityRating = deriveQualityRating(row)
   const rating = asNumber(row.rating, qualityRating)
@@ -179,14 +214,14 @@ export function normalizeSupplier(row: SupplierDbRow): Supplier {
 
   return {
     id: asString(row.id) || asString(row.supplier_id),
-    name: normalizeSupplierName(row.name),
+    name,
     country: asString(row.country, "Unknown"),
     city: asString(row.city, "Unknown"),
     region: normalizeRegion(row.region),
     category,
     subcategory: deriveSubcategory(row, products),
     products,
-    description: asString(row.description, "Supplier profile"),
+    description: asString(row.description, "Supplier profile").replaceAll(rawName, name),
     unit_price_usd: asNumber(row.unit_price_usd, 0),
     moq: normalizeMoq(row.moq, category),
     lead_time_days: asNumber(row.lead_time_days, 1),

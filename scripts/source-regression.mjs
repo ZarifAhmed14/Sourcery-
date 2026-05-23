@@ -5,15 +5,20 @@ const baseUrl = process.env.REGRESSION_BASE_URL ?? "http://127.0.0.1:3000"
 const queriesPath = path.join(process.cwd(), "scripts", "source-regression-queries.json")
 
 async function request(payload) {
+  const normalizedPayload = {
+    ...payload,
+    topK: Math.max(4, Number(payload.topK ?? 4)),
+  }
+
   const res = await fetch(`${baseUrl}/api/source`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify(payload),
+    body: JSON.stringify(normalizedPayload),
   })
 
   const body = await res.json().catch(() => null)
   if (!res.ok) {
-    throw new Error(`${payload.query} failed with ${res.status}: ${JSON.stringify(body)}`)
+    throw new Error(`${normalizedPayload.query} failed with ${res.status}: ${JSON.stringify(body)}`)
   }
   return body
 }

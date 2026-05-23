@@ -68,8 +68,7 @@ export async function POST(req: Request) {
           ai_provider: message ? result.provider : provider,
         },
       })
-    } catch (err) {
-      console.log("[sourcery] bargain fallback:", (err as Error).message)
+    } catch {
       return okJson({ message: fallback, meta: { llm_mode: "deterministic_fallback", ai_provider: provider } })
     }
   } catch (err) {

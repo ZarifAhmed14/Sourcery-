@@ -51,16 +51,17 @@ export const SupplierSchema = z.object({
 })
 
 export const SourceRequestSchema = z.object({
-  query: z.string().trim().min(2).max(800),
+  query: z.string().trim().max(800).optional().default(""),
+  brief: z.string().trim().max(800).optional().default(""),
   bangladeshMode: z.boolean().default(false),
-  topK: z.number().int().min(3).max(10).default(10),
+  topK: z.number().int().min(4).max(10).default(10),
   category: SupplierCategorySchema.nullable().optional(),
   product: z.string().trim().min(2).max(120).nullable().optional(),
   country: z.string().trim().min(2).max(80).nullable().optional(),
   region: SupplierRegionSchema.nullable().optional(),
   targetUnitPriceMin: z.coerce.number().min(0).max(100000).nullable().optional(),
   targetUnitPriceMax: z.coerce.number().min(0).max(100000).nullable().optional(),
-  orderQuantity: z.coerce.number().int().min(1).max(1000000).nullable().optional(),
+  orderQuantity: z.coerce.number().int().min(0).max(1000000).nullable().optional(),
   maxMOQ: z.coerce.number().int().min(1).max(1000000).nullable().optional(),
   maxLeadTimeDays: z.coerce.number().int().min(1).max(365).nullable().optional(),
   minQualityRating: z.coerce.number().min(1).max(5).nullable().optional(),
@@ -92,13 +93,13 @@ export const ProfitInputsSchema = z.object({
   shipping_cost_per_unit: z.coerce.number().min(0).default(1.5),
   customs_rate: z.coerce.number().min(0).max(100).default(5),
   packaging_cost_per_unit: z.coerce.number().min(0).default(0.8),
-  order_quantity: z.coerce.number().int().min(1).default(300),
+  order_quantity: z.coerce.number().int().min(0).default(300),
 })
 
 export const SimulationInputSchema = z.object({
   shipping_cost_delta_pct: z.coerce.number().min(-50).max(200).default(0),
   lead_time_delta_days: z.coerce.number().min(-30).max(90).default(0),
-  order_quantity: z.coerce.number().int().min(1).default(300),
+  order_quantity: z.coerce.number().int().min(0).default(300),
   selling_price: z.coerce.number().min(0.01),
   supplier_price_delta_pct: z.coerce.number().min(-30).max(100).default(0),
 })

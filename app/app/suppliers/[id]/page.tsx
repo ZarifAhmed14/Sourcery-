@@ -77,16 +77,6 @@ function demandGuidanceNote(supplier: ReturnType<typeof normalizeSupplier>) {
   return `${product} should be treated as a margin-and-inventory decision, not just a cheap quote. ${testOrder} ${reorder}`
 }
 
-function negotiationDraft(supplier: ReturnType<typeof normalizeSupplier>) {
-  const product = supplier.products?.[0] ?? supplier.subcategory
-  return [
-    `Hello ${supplier.name} team,`,
-    `We are reviewing suppliers for ${product}. Your quote profile shows ${supplier.moq.toLocaleString()} MOQ, ${supplier.lead_time_days} day lead time, and a unit price around $${supplier.unit_price_usd.toFixed(2)}.`,
-    "Before moving forward, can you confirm sample availability, packaging options, final inspection process, and whether there is room to improve the unit price for a repeat order?",
-    "If the sample quality is strong, we would like to discuss a first test order and a scaling plan.",
-  ].join("\n\n")
-}
-
 type SupplierPageData = {
   supplier: ReturnType<typeof normalizeSupplier>
   metadata: { port?: string; sample_days?: number; incoterms?: string[] }
@@ -154,7 +144,13 @@ export default async function SupplierDetailPage({ params }: { params: Promise<{
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-end">
+      <div className="flex flex-wrap justify-end gap-2">
+        <Button asChild className="rounded-md bg-[#16201d] text-[#f7f4ec] hover:bg-[#22312d]">
+          <Link href={`/app/suppliers/${supplier.id}/contact`}>
+            Contact supplier
+            <ArrowRight className="ml-1.5 h-4 w-4" />
+          </Link>
+        </Button>
         <Button asChild className="rounded-md bg-[#16201d] text-[#f7f4ec] hover:bg-[#22312d]">
           <Link href={`/app/compare?supplier=${supplier.id}`}>
             Profit & simulation
@@ -184,7 +180,7 @@ export default async function SupplierDetailPage({ params }: { params: Promise<{
             <h1 className="mt-4 font-serif text-5xl leading-none md:text-6xl">{supplier.name}</h1>
             <p className="mt-4 flex items-center gap-2 text-sm text-[#bdc8c2]">
               <MapPin className="h-4 w-4" />
-              {supplier.city}, {supplier.country} · {supplier.region}
+              {supplier.city}, {supplier.country} - {supplier.region}
             </p>
             <p className="mt-5 max-w-3xl text-base leading-7 text-[#dbe5df]">{supplier.description}</p>
             <div className="mt-7 rounded-lg border border-white/10 bg-white/[0.04] p-5">
@@ -300,13 +296,6 @@ export default async function SupplierDetailPage({ params }: { params: Promise<{
             </div>
           </section>
 
-          <section className="rounded-lg border border-black/10 bg-white p-5 shadow-sm">
-            <h2 className="text-xl font-semibold text-[#16201d]">Supplier negotiation draft</h2>
-            <p className="mt-2 text-sm leading-6 text-[#5d6965]">A simple first message the buyer can customize before contacting the supplier.</p>
-            <pre className="mt-4 whitespace-pre-wrap rounded-md border border-black/10 bg-[#f7f4ec] p-4 font-sans text-sm leading-6 text-[#16201d]">
-              {negotiationDraft(supplier)}
-            </pre>
-          </section>
         </div>
       </section>
 
@@ -314,12 +303,12 @@ export default async function SupplierDetailPage({ params }: { params: Promise<{
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#7a5b0f]">Next action</p>
-            <h2 className="mt-2 text-2xl font-semibold text-[#16201d]">Move from analysis into supplier decision</h2>
-            <p className="mt-2 text-sm leading-6 text-[#5d6965]">Open the decision page to see contact route, first-order plan, negotiation checklist, and buyer-ready next steps.</p>
+            <h2 className="mt-2 text-2xl font-semibold text-[#16201d]">Move from analysis into supplier contact</h2>
+            <p className="mt-2 text-sm leading-6 text-[#5d6965]">Open the contact desk to review the contact route, sample ask, negotiation checklist, and buyer-ready outreach draft.</p>
           </div>
           <Button asChild className="rounded-md bg-[#16201d] text-[#f7f4ec] hover:bg-[#22312d]">
-            <Link href={`/app/decision/${supplier.id}`}>
-              Open supplier decision
+            <Link href={`/app/suppliers/${supplier.id}/contact`}>
+              Contact supplier
               <ArrowRight className="ml-1.5 h-4 w-4" />
             </Link>
           </Button>

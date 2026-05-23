@@ -10,6 +10,7 @@ export type RetrievalMode = "vector" | "full_text" | "deterministic"
 export type RetrievalResult = {
   suppliers: Supplier[]
   mode: RetrievalMode
+  relaxed: boolean
 }
 
 type BuyerFilters = {
@@ -28,6 +29,9 @@ type SupplierRow = Record<string, unknown> & {
   similarity?: number | null
   retrieval_score?: number | null
 }
+
+const MINIMUM_SOURCE_RESULTS = 4
+const BD_PRIORITY_COUNTRIES = new Set(["Bangladesh", "India", "Pakistan", "Vietnam"])
 
 const CATEGORY_KEYWORDS: Record<SupplierCategory, RegExp> = {
   apparel: /\b(shirt|tee|t-shirt|hoodie|sweat|jeans|denim|jacket|knit|woven|fabric|garment|apparel|legging|activewear|silk|cashmere|cotton|textile)\b/,
@@ -100,6 +104,18 @@ function applyBuyerFilters(suppliers: Supplier[], filters: BuyerFilters): Suppli
     if (typeof filters.minQualityRating === "number" && supplier.quality_rating < filters.minQualityRating) return false
     return true
   })
+}
+
+function relaxBuyerFilters(filters: BuyerFilters): BuyerFilters {
+  return {
+    ...filters,
+    country: null,
+    targetUnitPriceMin: null,
+    targetUnitPriceMax: null,
+    maxMOQ: null,
+    maxLeadTimeDays: null,
+    minQualityRating: null,
+  }
 }
 
 function productMatches(supplier: Supplier, product?: string | null): boolean {
@@ -177,11 +193,15 @@ function rankSuppliersForQuery(
     targetUnitPriceMin: null,
     targetUnitPriceMax: null,
   }
+  const relaxedMinimumFilters = relaxBuyerFilters(filters)
   const relaxedFilteredUnique = applyBuyerFilters(unique, relaxedPriceFilters)
+  const minimumUnique = applyBuyerFilters(unique, relaxedMinimumFilters)
   const categoryPool = filterByCategoryWithFallback(filteredUnique, category)
   const relaxedCategoryPool = filterByCategoryWithFallback(relaxedFilteredUnique, category)
+  const minimumCategoryPool = filterByCategoryWithFallback(minimumUnique, category)
   const productMatched = categoryPool.filter((supplier) => productMatches(supplier, filters.product))
   const relaxedProductMatched = relaxedCategoryPool.filter((supplier) => productMatches(supplier, filters.product))
+  const minimumProductMatched = minimumCategoryPool.filter((supplier) => productMatches(supplier, filters.product))
   const directlyMatched = categoryPool.filter((supplier) => hasDirectQueryMatch(supplier, query, category))
   const primaryPool =
     productMatched.length >= Math.min(topK, 5)
@@ -197,6 +217,12 @@ function rankSuppliersForQuery(
       : productMatched.length > 0
         ? categoryPool
         : relaxedFilteredUnique
+  const minimumFallbackPool =
+    minimumProductMatched.length > 0
+      ? minimumProductMatched
+      : minimumCategoryPool.length > 0
+        ? minimumCategoryPool
+        : unique
 
   const rankedPrimary = primaryPool
     .map((supplier) => ({ supplier, score: relevanceScore(supplier, query, category, filters) }))
@@ -207,7 +233,8 @@ function rankSuppliersForQuery(
   if (rankedPrimary.length >= topK) return rankedPrimary
 
   const used = new Set(rankedPrimary.map((s) => s.id))
-  const filler = fallbackPool
+  const fillerPool = rankedPrimary.length < Math.min(MINIMUM_SOURCE_RESULTS, topK) ? [...fallbackPool, ...minimumFallbackPool] : fallbackPool
+  const filler = uniqueSuppliers(fillerPool)
     .filter((supplier) => !used.has(supplier.id))
     .map((supplier) => ({ supplier, score: relevanceScore(supplier, query, category, filters) }))
     .sort((a, b) => b.score - a.score || b.supplier.quality_rating - a.supplier.quality_rating)
@@ -238,7 +265,6 @@ async function retrieveByVector(
   })
 
   if (error) {
-    console.log("[sourcery] vector retrieval fallback:", error.message)
     return null
   }
 
@@ -283,7 +309,13 @@ export async function retrieveCandidates(
   const category = categoryOverride ?? detectCategory(query)
 
   if (!hasServiceSupabaseEnv()) {
-    return { suppliers: applyBuyerFilters(getDemoSuppliers(query, Math.max(topK * 6, 60), category), filters).slice(0, topK), mode: "deterministic" }
+    const pool = getDemoSuppliers(query, Math.max(topK * 8, 80), category)
+    const strictCount = applyBuyerFilters(pool, filters).length
+    return {
+      suppliers: rankSuppliersForQuery(pool, query, category, topK, filters),
+      mode: "deterministic",
+      relaxed: strictCount < Math.min(MINIMUM_SOURCE_RESULTS, topK),
+    }
   }
 
   let vectorSuppliers: Supplier[] = []
@@ -295,8 +327,7 @@ export async function retrieveCandidates(
       vectorSuppliers = vector
       vectorMode = true
     }
-  } catch (err) {
-    console.log("[sourcery] vector retrieval skipped:", (err as Error).message)
+  } catch {
   }
 
   let fullTextSuppliers: Supplier[] = []
@@ -305,31 +336,43 @@ export async function retrieveCandidates(
     if (fullText.length > 0) {
       fullTextSuppliers = fullText
     }
-  } catch (err) {
-    console.log("[sourcery] full-text retrieval fallback:", (err as Error).message)
+  } catch {
   }
 
   const demoSuppliers = getDemoSuppliers(query, Math.max(topK * 6, 60), category)
   const ranked = rankSuppliersForQuery([...vectorSuppliers, ...fullTextSuppliers, ...demoSuppliers], query, category, topK, filters)
   if (ranked.length > 0) {
-    return { suppliers: ranked, mode: vectorMode ? "vector" : "full_text" }
+    const strictCount = applyBuyerFilters([...vectorSuppliers, ...fullTextSuppliers, ...demoSuppliers], filters).length
+    return {
+      suppliers: ranked,
+      mode: vectorMode ? "vector" : "full_text",
+      relaxed: strictCount < Math.min(MINIMUM_SOURCE_RESULTS, topK),
+    }
   }
 
-  return { suppliers: applyBuyerFilters(getDemoSuppliers(query, Math.max(topK * 6, 60), category), filters).slice(0, topK), mode: "deterministic" }
+  const fallbackPool = getDemoSuppliers(query, Math.max(topK * 8, 80), category)
+  return {
+    suppliers: rankSuppliersForQuery(fallbackPool, query, category, topK, filters),
+    mode: "deterministic",
+    relaxed: applyBuyerFilters(fallbackPool, filters).length < Math.min(MINIMUM_SOURCE_RESULTS, topK),
+  }
 }
 
 export function rescoreForBangladeshMode(suppliers: Supplier[], bangladeshMode: boolean, topK = 10): Supplier[] {
   if (!bangladeshMode) return suppliers.slice(0, topK)
 
-  const southAsia = new Set(["Bangladesh", "India", "Pakistan", "Vietnam"])
   const scored = suppliers.map((supplier) => {
     const base = typeof supplier.retrieval_score === "number" ? supplier.retrieval_score * 100 : supplier.quality_rating * 20
     const score =
-      base +
-      (southAsia.has(supplier.country) ? 15 : 0) -
-      (supplier.lead_time_days > 45 ? 10 : 0) +
-      (supplier.moq <= 500 ? 5 : 0) +
-      (supplier.bgmea_certified ? 5 : 0)
+      base * 0.62 +
+      (BD_PRIORITY_COUNTRIES.has(supplier.country) ? 24 : 0) -
+      supplier.risk_score * 0.2 +
+      supplier.quality_rating * 3 +
+      supplier.on_time_rate * 0.08 -
+      Math.min(14, supplier.lead_time_days * 0.16) +
+      (supplier.moq <= 500 ? 8 : supplier.moq <= 1000 ? 4 : 0) +
+      (supplier.bgmea_certified ? 7 : 0) +
+      (supplier.country === "Bangladesh" ? 4 : 0)
 
     return { supplier, score }
   })

@@ -68,4 +68,5 @@ export type ApiMeta = {
   result_quality: "high_confidence" | "rules_based_fallback" | "limited_supplier_pool" | "standard"
   ranking_version: string
   elapsed_ms: number
+  relaxed_filters?: boolean
 }

@@ -4,7 +4,7 @@ import Link from "next/link"
 import type { ComponentType } from "react"
 import { useEffect, useMemo, useState } from "react"
 import { useSearchParams } from "next/navigation"
-import { ArrowLeft, ArrowRight, GitCompare, LineChart, Plane, ShieldCheck, ShipWheel, Sparkles, TrendingUp, Truck } from "lucide-react"
+import { ArrowLeft, ArrowRight, GitCompare, LineChart, Mail, Plane, ShieldCheck, ShipWheel, Sparkles, TrendingUp, Truck } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { ProfitPanel } from "@/components/sourcery/profit-panel"
 import { SimulationPanel } from "@/components/sourcery/simulation-panel"
@@ -160,12 +160,20 @@ export default function ComparePage() {
           preserveWorkspace={!supplierId}
         />
         {supplierId && result ? (
-          <Button asChild variant="outline" className="rounded-md border-black/10 bg-transparent text-[#16201d] hover:bg-[#f1ede3]">
-            <Link href="/app/compare">
-              <GitCompare className="mr-1.5 h-4 w-4" />
-              Compare with other suppliers
-            </Link>
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button asChild className="rounded-md bg-[#16201d] text-[#f7f4ec] hover:bg-[#22312d]">
+              <Link href={`/app/suppliers/${supplierId}/contact`}>
+                <Mail className="mr-1.5 h-4 w-4" />
+                Contact supplier
+              </Link>
+            </Button>
+            <Button asChild variant="outline" className="rounded-md border-black/10 bg-transparent text-[#16201d] hover:bg-[#f1ede3]">
+              <Link href="/app/compare">
+                <GitCompare className="mr-1.5 h-4 w-4" />
+                Compare with other suppliers
+              </Link>
+            </Button>
+          </div>
         ) : null}
       </div>
 
@@ -200,6 +208,14 @@ export default function ComparePage() {
             {warning}
           </div>
         ) : null}
+        <div className="mt-5 flex flex-wrap gap-2">
+          <Button asChild className="rounded-md bg-[#16201d] text-[#f7f4ec] hover:bg-[#22312d]">
+            <Link href={`/app/suppliers/${best.id}/contact`}>
+              <Mail className="mr-1.5 h-4 w-4" />
+              Contact front-runner
+            </Link>
+          </Button>
+        </div>
       </section>
 
       <section className="grid gap-4 lg:grid-cols-[0.95fr_1.05fr]">

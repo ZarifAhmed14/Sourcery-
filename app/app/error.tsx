@@ -4,8 +4,6 @@
 
 "use client"
 
-// useEffect lets us log the error once when the boundary first catches it.
-import { useEffect } from "react"
 // Reusable Button component from the design system.
 import { Button } from "@/components/ui/button"
 // Lucide icons for the error state.
@@ -13,11 +11,7 @@ import { AlertTriangle, RotateCcw } from "lucide-react"
 
 // Props are provided by Next.js automatically — `error` is the thrown error,
 // and `reset` re-renders the segment to attempt recovery.
-export default function AppError({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
-  // Log the error once for observability (server logs pick this up in production).
-  useEffect(() => {
-    console.log("[v0] /app error boundary caught:", error.message, error.digest)
-  }, [error])
+export default function AppError({ reset }: { error: Error & { digest?: string }; reset: () => void }) {
 
   return (
     // Center the card vertically inside the agent layout.

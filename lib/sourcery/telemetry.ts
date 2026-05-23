@@ -18,8 +18,7 @@ export async function recordSourceEvent(result: SourcingResult): Promise<void> {
       country_diversity: result.meta.country_diversity,
       elapsed_ms: result.meta.elapsed_ms,
     })
-    if (error) console.log("[sourcery] telemetry skipped:", error.message)
-  } catch (err) {
-    console.log("[sourcery] telemetry skipped:", (err as Error).message)
+    void error
+  } catch {
   }
 }

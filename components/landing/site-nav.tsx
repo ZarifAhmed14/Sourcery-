@@ -6,6 +6,7 @@
 import Link from "next/link"
 // Shared button component from shadcn/ui — used for the primary CTA.
 import { Button } from "@/components/ui/button"
+import { BrandLogo } from "@/components/sourcery/brand-logo"
 
 // Default export — Server Component (no client interactivity needed yet).
 export function SiteNav() {
@@ -16,12 +17,7 @@ export function SiteNav() {
       {/* Centered nav row with horizontal padding that grows on larger screens. */}
       <nav className="mx-auto flex h-16 max-w-7xl items-center justify-between px-6 md:px-10">
         {/* Wordmark on the left — links back to landing root. */}
-        <Link href="/" className="flex items-center gap-2">
-          {/* Decorative dot in the lime accent color to anchor the wordmark. */}
-          <span className="h-2 w-2 rounded-full bg-accent" aria-hidden="true" />
-          {/* Brand name in display serif for editorial signature. */}
-          <span className="font-serif text-2xl tracking-tight text-foreground">Sourcery</span>
-        </Link>
+        <BrandLogo />
 
         {/* Center nav links — hidden on mobile, shown from md upward. */}
         <ul className="hidden items-center gap-8 md:flex">

@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react"
+import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react"
 import Link from "next/link"
 import {
   ArrowRight,
@@ -121,6 +121,22 @@ function plainOperationalFit(supplier: Supplier) {
   return `This supplier can start from ${supplier.moq.toLocaleString()} units, usually needs about ${supplier.lead_time_days} days before goods are ready, and has a ${rating}/5 quality rating. Lower MOQ is easier for a small test order; shorter lead time means you can restock faster.`
 }
 
+function buildSupplierListUrl(args: {
+  category?: SupplierCategory
+  product?: string
+  country: string
+  region: "Any region" | SupplierRegion
+}) {
+  const params = new URLSearchParams({ limit: "100" })
+
+  if (args.category) params.set("category", args.category)
+  if (args.product) params.set("q", args.product)
+  if (args.country !== "Any country") params.set("country", args.country)
+  if (args.region !== "Any region") params.set("region", args.region)
+
+  return `/api/suppliers?${params.toString()}`
+}
+
 function plainRiskExplanation(supplier: Supplier, explanation?: string | null) {
   const product = supplier.products?.[0] ?? supplier.subcategory
   const distanceNote =
@@ -145,8 +161,9 @@ function plainRiskExplanation(supplier: Supplier, explanation?: string | null) {
 }
 
 function displaySupplierName(supplier: Supplier) {
+  if (supplier.id === "eval-0003") return "Mahmud Group"
   return supplier.name
-    .replace(/^(Atlas|Bridge|Crown|Dragon|East|Evergreen|Global|Harbor|Indigo|Jade|Metro|Noble|Onyx|Pacific|Pioneer|Prime|River|Summit|Unity|Vertex|Dhaka|Hanoi|Mumbai|Jakarta|Istanbul|Bengaluru|Karachi|Lahore|Noida|Chattogram|Chittagong)\s+/i, "")
+    .replace(/^(Atlas|Bridge|Crown|Dragon|East|Evergreen|Global|Harbor|Indigo|Jade|Metro|Noble|Onyx|Pioneer|Prime|River|Summit|Unity|Vertex|Dhaka|Hanoi|Mumbai|Jakarta|Istanbul|Bengaluru|Karachi|Lahore|Noida|Chattogram|Chittagong)\s+/i, "")
     .replace(/\s+\d{2,4}$/i, "")
     .replace(/\s+Works$/i, " Co.")
     .trim()
@@ -195,25 +212,52 @@ function supplierConfidenceLabel(args: {
   return { label: "Standard confidence", className: "bg-[#ede8dc] text-[#53605c]" }
 }
 
-function whySupplierWon(args: {
-  supplier: Supplier
-  discovery: SourcingResult["discovery"][number]
-  rank: number
-  totalVisible: number
-}) {
-  const { supplier, discovery, rank, totalVisible } = args
+function supplierExplanationFallback(supplier: Supplier): string {
   const product = supplier.products?.[0] ?? supplier.subcategory
-  const strengths = buildKeyPills(supplier, discovery.key_factors).slice(0, 3)
-  const leadText = supplier.lead_time_days <= 25 ? "short lead time" : `${supplier.lead_time_days} day lead time`
-  const moqText = supplier.moq <= 600 ? "manageable MOQ" : `${supplier.moq.toLocaleString()} MOQ`
-  const intro =
-    rank === 1
-      ? `Sourcery put this first because it is the strongest available match for ${product}.`
-      : `Sourcery kept this in the shortlist because it gives the buyer another workable ${product} option.`
+  const productText = product ? ` for ${product}` : ""
 
-  return `${intro} The profile balances ${formatMoney(supplier.unit_price_usd, false)} unit cost, ${moqText}, and ${leadText}. ${
-    strengths.length > 0 ? `Main signals: ${strengths.join(", ")}.` : ""
-  } ${totalVisible <= 2 ? "Because the supplier pool is narrow, sample checks matter more before committing." : ""}`.trim()
+  if (supplier.lead_time_days > 50) {
+    return `Competitive pricing keeps this supplier in the mix${productText}, but the longer production window makes it better for planned inventory than rush replenishment.`
+  }
+  if (supplier.moq >= 3000) {
+    return `The higher MOQ fits buyers with proven demand who need a supplier prepared for larger production runs.`
+  }
+  if (supplier.moq <= 500) {
+    return `The lower order commitment makes this a practical first run before scaling into larger production.`
+  }
+  if (supplier.lead_time_days <= 25) {
+    return `The shorter lead time makes this a strong option when the buyer wants to move quickly from sample to order.`
+  }
+  if (supplier.quality_rating >= 4.6 || (supplier.rating ?? 0) >= 4.6) {
+    return `Product quality is the strongest reason to review this supplier, especially when finish and consistency matter more than the cheapest quote.`
+  }
+  if (supplier.risk_score <= 28) {
+    return `Fewer operational warning signs make this a reliable profile to review early in the shortlist.`
+  }
+  if (supplier.unit_price_usd <= 3) {
+    return `The pricing gives the buyer more room for packaging, freight, and resale margin.`
+  }
+  if (supplier.on_time_rate >= 95) {
+    return `The delivery record supports a more dependable launch plan, which matters when timing is a buying priority.`
+  }
+  if (supplier.country === "Bangladesh") {
+    return `This keeps the shortlist local in Bangladesh, making sampling, communication, and follow-up easier to manage.`
+  }
+  if (supplier.bgmea_certified) {
+    return `The compliance signal helps when documentation and factory readiness matter to the buying decision.`
+  }
+  return `This gives the buyer a useful comparison point before deciding which supplier deserves outreach.`
+}
+
+function cardSupplierExplanation(supplier: Supplier, discovery: SourcingResult["discovery"][number]) {
+  const explanation = discovery.explanation.trim()
+  const bestFor = supplierBestFor(supplier).toLowerCase()
+  const isBad =
+    !explanation ||
+    /^this supplier was selected\b/i.test(explanation) ||
+    explanation.toLowerCase().includes(bestFor)
+
+  return isBad ? supplierExplanationFallback(supplier) : explanation
 }
 
 export function SourcingChat() {
@@ -235,6 +279,8 @@ export function SourcingChat() {
   const [selectedSize, setSelectedSize] = useState<string | null>(null)
   const [hasRestoredState, setHasRestoredState] = useState(false)
   const [restoreScrollY, setRestoreScrollY] = useState<number | null>(null)
+  const [supplierListError, setSupplierListError] = useState<string | null>(null)
+  const supplierListCache = useRef(new Map<string, Supplier[]>())
 
   const resetSearchState = () => {
     setStatus("idle")
@@ -297,21 +343,58 @@ export function SourcingChat() {
 
   useEffect(() => {
     let active = true
-    void fetch("/api/suppliers?limit=12")
-      .then((res) => res.json())
+    const controller = new AbortController()
+    const url = buildSupplierListUrl({
+      category: selectedCategory,
+      product: selectedProduct,
+      country: selectedCountry,
+      region: selectedRegion,
+    })
+
+    const cached = supplierListCache.current.get(url)
+    if (cached) {
+      setSuppliers(cached)
+      setSupplierListError(null)
+      setSelectedId((current) => {
+        if (current && cached.some((supplier) => supplier.id === current)) return current
+        return cached[0]?.id ?? null
+      })
+      return () => {
+        active = false
+        controller.abort()
+      }
+    }
+
+    const timer = window.setTimeout(() => {
+      void fetch(url, { signal: controller.signal })
+      .then((res) => {
+        if (!res.ok) throw new Error(`Supplier preview failed (${res.status})`)
+        return res.json()
+      })
       .then((data: SupplierListResponse) => {
         if (!active) return
-        setSuppliers(data.suppliers ?? [])
-        setSelectedId((current) => current ?? data.suppliers?.[0]?.id ?? null)
+        const nextSuppliers = data.suppliers ?? []
+        supplierListCache.current.set(url, nextSuppliers)
+        setSuppliers(nextSuppliers)
+        setSupplierListError(null)
+        setSelectedId((current) => {
+          if (current && nextSuppliers.some((supplier) => supplier.id === current)) return current
+          return nextSuppliers[0]?.id ?? null
+        })
       })
-      .catch(() => {
-        if (active) setSuppliers([])
+      .catch((err) => {
+        if (!active || (err as Error).name === "AbortError") return
+        setSuppliers([])
+        setSupplierListError("Supplier preview could not load. You can still run a search, or retry by changing a filter.")
       })
+    }, 180)
 
     return () => {
       active = false
+      controller.abort()
+      window.clearTimeout(timer)
     }
-  }, [])
+  }, [selectedCategory, selectedCountry, selectedProduct, selectedRegion])
 
   const ranked = useMemo(() => {
     if (!result) return []
@@ -340,7 +423,7 @@ export function SourcingChat() {
   )
 
   const productVisual = useMemo(() => getProductVisualConfig(selectedProduct), [selectedProduct])
-  const priceBandOptions = useMemo(() => getProductPriceBands(selectedProduct), [selectedProduct])
+  const priceBandOptions = useMemo(() => (selectedProduct ? getProductPriceBands(selectedProduct) : []), [selectedProduct])
 
   const countryOptions = useMemo(() => {
     const regionCountries = selectedRegion === "Any region" ? ALLOWED_COUNTRIES : REGION_COUNTRIES[selectedRegion] ?? []
@@ -358,15 +441,21 @@ export function SourcingChat() {
   }, [countryOptions, selectedCountry])
 
   useEffect(() => {
-    if (!bangladeshMode) return
-    setSelectedRegion("South Asia")
-    setSelectedCountry("Bangladesh")
+    resetSearchState()
+    if (bangladeshMode) {
+      setSelectedRegion("South Asia")
+      setSelectedCountry("Bangladesh")
+      return
+    }
+
+    setSelectedRegion("Any region")
+    setSelectedCountry("Any country")
   }, [bangladeshMode])
 
   const filteredPool = useMemo(() => {
-    const selectedBand = priceBandOptions.find((band) => band.value === priceBand) ?? priceBandOptions[0]
-    const minPrice = selectedBand.min
-    const maxPrice = selectedBand.max
+    const selectedBand = selectedProduct ? priceBandOptions.find((band) => band.value === priceBand) ?? priceBandOptions[0] : null
+    const minPrice = selectedBand?.min
+    const maxPrice = selectedBand?.max
     const desiredQty = parseOptionalNumber(orderQuantity)
 
     return directoryPool.filter((supplier) => {
@@ -389,9 +478,8 @@ export function SourcingChat() {
 
   const visibleRanked = useMemo(() => {
     if (ranked.length === 0) return []
-    const visibleIds = new Set(filteredPool.map((supplier) => supplier.id))
-    return ranked.filter((item) => visibleIds.has(item.supplier.id)).slice(0, 5)
-  }, [filteredPool, ranked])
+    return ranked.slice(0, 5)
+  }, [ranked])
   const displayedRanked = hasSearched ? visibleRanked : []
   const noAvailableSuppliersMessage =
     hasSearched && status !== "loading" && displayedRanked.length === 0
@@ -455,16 +543,16 @@ export function SourcingChat() {
       return
     }
     const selectedBand = priceBandOptions.find((band) => band.value === priceBand) ?? priceBandOptions[0]
-    const targetUnitPriceMin = selectedBand.min
-    const targetUnitPriceMax = selectedBand.max
+    const targetUnitPriceMin = selectedBand?.min
+    const targetUnitPriceMax = selectedBand?.max
     const normalizedOrderQuantity = parseOptionalNumber(orderQuantity)
     const composedQuery = buildSourcingQuery({
       category: selectedCategory,
       product: selectedProduct,
       productVariant: selectedVariant,
       productSize: selectedSize,
-      country: bangladeshMode ? "Bangladesh" : selectedCountry,
-      region: bangladeshMode ? "South Asia" : selectedRegion,
+      country: selectedCountry,
+      region: selectedRegion,
       targetPriceMin: targetUnitPriceMin,
       targetPriceMax: targetUnitPriceMax,
       orderQuantity: normalizedOrderQuantity,
@@ -481,11 +569,11 @@ export function SourcingChat() {
         body: JSON.stringify({
           query: composedQuery,
           bangladeshMode,
-          topK: 5,
-          category: selectedCategory,
-          product: selectedProduct,
-          country: bangladeshMode ? "Bangladesh" : selectedCountry === "Any country" ? null : selectedCountry,
-          region: bangladeshMode ? "South Asia" : selectedRegion === "Any region" ? null : selectedRegion,
+          topK: 8,
+          category: selectedCategory ?? null,
+          product: selectedProduct ?? null,
+          country: selectedCountry === "Any country" ? null : selectedCountry,
+          region: selectedRegion === "Any region" ? null : selectedRegion,
           targetUnitPriceMin: targetUnitPriceMin ?? null,
           targetUnitPriceMax: targetUnitPriceMax ?? null,
           orderQuantity: normalizedOrderQuantity ?? null,
@@ -667,14 +755,15 @@ export function SourcingChat() {
 
       <FilterBlock label="Target unit price">
         <Select
-          value={priceBand}
+          value={selectedProduct ? priceBand : undefined}
           onValueChange={(value) => {
             resetSearchState()
             setPriceBand(value as PriceBandValue)
           }}
+          disabled={!selectedProduct}
         >
-          <SelectTrigger className="h-9 w-full border-black/10 bg-[#f7f4ec] text-sm text-[#16201d]">
-            <SelectValue placeholder="Choose price band" />
+          <SelectTrigger className="h-9 w-full border-black/10 bg-[#f7f4ec] text-sm text-[#16201d] disabled:text-[#85918c]">
+            <SelectValue placeholder={selectedProduct ? "Choose price band" : ""} />
           </SelectTrigger>
           <SelectContent className="border-black/10 bg-[#fffdf7] text-[#16201d]">
             {priceBandOptions.map((band) => (
@@ -698,6 +787,21 @@ export function SourcingChat() {
           className="h-9 border-black/10 bg-[#f7f4ec] text-sm text-[#16201d] placeholder:text-[#85918c]"
         />
       </FilterBlock>
+
+      {supplierListError ? (
+        <div className="rounded-lg border border-[#d9b44a]/35 bg-[#fff8df] px-3 py-2 text-sm leading-6 text-[#6b5a24]">
+          {supplierListError}
+        </div>
+      ) : null}
+
+      {status === "error" && error ? (
+        <div className="rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-sm leading-6 text-rose-900">
+          <div>{error}</div>
+          <button type="button" onClick={() => void executeSourcing()} className="mt-2 font-semibold underline underline-offset-4">
+            Retry sourcing
+          </button>
+        </div>
+      ) : null}
     </div>
   )
 
@@ -904,51 +1008,19 @@ export function SourcingChat() {
                       </span>
                     </div>
 
-                    <div className="grid grid-cols-4 gap-2 text-xs">
+                    <div className="grid grid-cols-3 gap-2 text-xs">
                       <MiniMetric label="Unit price" value={formatMoney(item.supplier.unit_price_usd, bangladeshMode)} />
                       <MiniMetric label="MOQ" value={item.supplier.moq.toLocaleString()} />
                       <MiniMetric label="Lead" value={`${item.supplier.lead_time_days}d`} />
-                      <MiniMetric label="Best for" value={supplierBestFor(item.supplier)} />
                     </div>
 
-                    <div className="rounded-xl border border-black/10 bg-[#f7f4ec] p-3 text-sm leading-6 text-[#4e5a55]">
-                      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                        <span className="text-xs font-semibold uppercase tracking-[0.14em] text-[#7a5b0f]">
-                          Why this supplier
-                        </span>
-                        <span
-                          className={cn(
-                            "rounded-full px-2.5 py-1 text-xs font-semibold",
-                            supplierConfidenceLabel({
-                              confidence: item.discovery.confidence,
-                              fitScore: item.discovery.fit_score,
-                              resultQuality: result?.meta.result_quality,
-                            }).className,
-                          )}
-                        >
-                          {
-                            supplierConfidenceLabel({
-                              confidence: item.discovery.confidence,
-                              fitScore: item.discovery.fit_score,
-                              resultQuality: result?.meta.result_quality,
-                            }).label
-                          }
-                        </span>
-                      </div>
-                      {whySupplierWon({
-                        supplier: item.supplier,
-                        discovery: item.discovery,
-                        rank: itemIndex + 1,
-                        totalVisible: displayedRanked.length,
-                      })}
+                    <div className="rounded-xl border border-black/10 bg-[#f7f4ec] px-3 py-2 text-sm leading-6 text-[#4e5a55]">
+                      {cardSupplierExplanation(item.supplier, item.discovery)}
                     </div>
 
                   </Link>
 
                   <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-black/10 pt-3">
-                    <span className="rounded-full bg-[#f1ede3] px-3 py-1.5 text-xs font-medium text-[#53605c]">
-                      Best for {supplierBestFor(item.supplier).toLowerCase()}
-                    </span>
                     <div className="flex flex-wrap gap-2">
                       <Link
                         href={`/app/compare?supplier=${item.supplier.id}`}

@@ -46,8 +46,7 @@ export async function updateSession(request: NextRequest) {
   // with the Supabase client, your users may be randomly logged out.
   const {
     data: { user },
-  } = await supabase.auth.getUser().catch((error) => {
-    console.log("[sourcery] Supabase proxy auth skipped:", error.message)
+  } = await supabase.auth.getUser().catch(() => {
     return { data: { user: null } }
   })
 

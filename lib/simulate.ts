@@ -11,7 +11,7 @@ export type SimulationDeltas = {
   shipping_cost_delta_pct: number
   // Lead time change in days (-30 to +90). Affects display ordering only, not profit math.
   lead_time_delta_days: number
-  // Order quantity override (replaces ProfitInputs.order_quantity if > 0).
+  // Order quantity override. Zero is valid and produces zero total profit/cost.
   order_quantity: number
   // New selling price (replaces ProfitInputs.selling_price).
   selling_price: number

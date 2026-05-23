@@ -79,7 +79,7 @@ export function ProfitPanel({ suppliers, inputs, onChange }: Props) {
         <NumberField id="shipping" label="Shipping / unit" suffix="$" step={0.1} value={inputs.shipping_cost_per_unit} onChange={(v) => update("shipping_cost_per_unit", v)} />
         <NumberField id="customs" label="Customs %" suffix="%" step={0.5} value={inputs.customs_rate} onChange={(v) => update("customs_rate", v)} />
         <NumberField id="packaging" label="Packaging / unit" suffix="$" step={0.1} value={inputs.packaging_cost_per_unit} onChange={(v) => update("packaging_cost_per_unit", v)} />
-        <NumberField id="qty" label="Order qty" suffix="" step={50} value={inputs.order_quantity} onChange={(v) => update("order_quantity", Math.max(1, Math.round(v)))} />
+        <NumberField id="qty" label="Order qty" suffix="" step={50} value={inputs.order_quantity} onChange={(v) => update("order_quantity", Math.max(0, Math.round(v)))} />
       </div>
 
       {/* Per-supplier rows. */}
@@ -97,6 +97,7 @@ export function ProfitPanel({ suppliers, inputs, onChange }: Props) {
           const badge = p.recommended_type ? BADGE_META[p.recommended_type] : null
           // Margin tone — green/amber/red driven by gross_margin %.
           const marginTone = p.gross_margin > 0.4 ? "text-emerald-600" : p.gross_margin > 0.2 ? "text-amber-600" : p.gross_margin > 0 ? "text-foreground" : "text-rose-600"
+          const totalProfitTone = p.total_profit < 0 ? "text-rose-600" : "text-foreground"
           return (
             <div key={s.id} className="grid grid-cols-12 gap-3 border-b border-black/10 px-4 py-4 last:border-b-0">
               {/* Supplier identity + badge + AI-style explanation (deterministic). */}
@@ -117,7 +118,7 @@ export function ProfitPanel({ suppliers, inputs, onChange }: Props) {
               <Cell className="col-span-3 md:col-span-2">{formatMoney(p.landed_cost, bangladeshMode)}</Cell>
               <Cell className={cn("col-span-3 md:col-span-2", marginTone)}>{(p.gross_margin * 100).toFixed(1)}%</Cell>
               <Cell className="col-span-3 md:col-span-2">{(p.risk_adjusted_profit * 100).toFixed(1)}%</Cell>
-              <Cell className="col-span-3 md:col-span-2">{formatMoney(p.total_profit, bangladeshMode)}</Cell>
+              <Cell className={cn("col-span-3 md:col-span-2", totalProfitTone)}>{formatMoney(p.total_profit, bangladeshMode)}</Cell>
             </div>
           )
         })}

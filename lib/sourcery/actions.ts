@@ -41,7 +41,6 @@ export async function saveSearchAction(payload: {
 
   if (!canonical.error) return { ok: true }
 
-  console.log("[sourcery] canonical saved_searches insert failed:", canonical.error.message)
   const legacy = await supabase.from("saved_searches").insert({
     user_id: user.id,
     query: payload.query,
@@ -56,7 +55,6 @@ export async function saveSearchAction(payload: {
   })
 
   if (legacy.error) {
-    console.log("[sourcery] legacy saved_searches insert failed:", legacy.error.message)
     return { ok: false, reason: legacy.error.message }
   }
 

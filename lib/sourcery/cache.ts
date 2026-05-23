@@ -66,8 +66,7 @@ export async function getCached<T = unknown>(key: string): Promise<T | null> {
     if (error || !data) return null
     if (new Date(data.expires_at).getTime() < Date.now()) return null
     return data.response as T
-  } catch (err) {
-    console.log("[sourcery] cache read skipped:", (err as Error).message)
+  } catch {
     return null
   }
 }
@@ -88,8 +87,7 @@ export async function setCached<T = unknown>(key: string, value: T, ttlSeconds =
       },
       { onConflict: "cache_key" },
     )
-    if (error) console.log("[sourcery] cache upsert skipped:", error.message)
-  } catch (err) {
-    console.log("[sourcery] cache write skipped:", (err as Error).message)
+    void error
+  } catch {
   }
 }
