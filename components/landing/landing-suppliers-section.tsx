@@ -1,5 +1,6 @@
 "use client"
 
+import Image from "next/image"
 import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { ArrowRight, MapPin, Search } from "lucide-react"
@@ -172,7 +173,14 @@ function SupplierThumb({ supplier }: { supplier: Supplier }) {
   const image = getProductImage({ supplier })
   return (
     <div className="h-14 w-16 shrink-0 overflow-hidden rounded-xl border border-black/10 bg-[#f1ede3]">
-      <img src={image.src} alt={image.alt} className="h-full w-full object-cover" loading="lazy" />
+      <Image
+        src={image.src}
+        alt={image.alt}
+        width={64}
+        height={56}
+        sizes="64px"
+        className="h-full w-full object-cover"
+      />
     </div>
   )
 }

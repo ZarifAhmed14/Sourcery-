@@ -11,6 +11,7 @@ export async function saveSearchAction(payload: {
   result: SourcingResult
   category?: SupplierCategory
   product?: string
+  type?: string | null
 }): Promise<{ ok: boolean; reason?: string }> {
   if (!isSupabaseConfigured()) return { ok: false, reason: "supabase_not_configured" }
 
@@ -36,6 +37,7 @@ export async function saveSearchAction(payload: {
       ranking_version: payload.result.meta.ranking_version,
       category: payload.category,
       product: payload.product,
+      type: payload.type,
     },
   })
 
@@ -48,6 +50,7 @@ export async function saveSearchAction(payload: {
       bangladesh_mode: payload.bangladeshMode,
       category: payload.category ?? null,
       product: payload.product ?? null,
+      type: payload.type ?? null,
     },
     result_supplier_ids: payload.result.suppliers.map((supplier) => supplier.id),
     results_snapshot: payload.result,

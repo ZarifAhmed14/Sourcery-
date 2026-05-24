@@ -1,3 +1,4 @@
+import Image from "next/image"
 import Link from "next/link"
 import { notFound } from "next/navigation"
 import {
@@ -25,102 +26,16 @@ import { TermLabel } from "@/components/sourcery/term-help"
 import { formatMoney } from "@/lib/currency"
 import { getProductImage } from "@/lib/product-images"
 import { findDemoSupplier } from "@/lib/sourcery/demo-suppliers"
+import {
+  buildDecisionReasoning,
+  buildDecisionRecommendation,
+  buildNegotiationChecklist,
+  buildOutreachDraft,
+  buildRiskMitigationPlan,
+} from "@/lib/sourcery/profile-copy"
 import { enrichSupplierProfileFields, inferSupplierLogisticsLane } from "@/lib/sourcery/supplier-profile-enrichment"
 import { normalizeSupplier } from "@/lib/sourcery/supplier-normalizer"
 import { getAdminClient, isAdminSupabaseConfigured } from "@/lib/supabase/admin"
-
-function supplierRecommendation(supplier: ReturnType<typeof normalizeSupplier>) {
-  if (supplier.risk_score <= 25 && supplier.lead_time_days <= 30) {
-    return {
-      label: "Ready for sample",
-      tone: "bg-emerald-50 text-emerald-800 border-emerald-200",
-      summary:
-        "This supplier is strong enough for a sample-first conversation. The risk is manageable, the lead time is practical, and the MOQ is not unusually heavy.",
-    }
-  }
-
-  if (supplier.risk_score <= 50) {
-    return {
-      label: "Proceed with caution",
-      tone: "bg-amber-50 text-amber-800 border-amber-200",
-      summary:
-        "This supplier can still work, but the buyer should verify samples, delivery timing, and packaging before moving into a paid order.",
-    }
-  }
-
-  return {
-    label: "Keep as backup option",
-    tone: "bg-rose-50 text-rose-800 border-rose-200",
-    summary:
-      "This supplier is better treated as a backup until more proof is collected. The buyer should compare it against safer options before committing.",
-  }
-}
-
-function decisionReasoning(supplier: ReturnType<typeof normalizeSupplier>) {
-  const qualityLine =
-    supplier.quality_rating >= 4.4
-      ? "The quality signal is strong enough to justify a sample request."
-      : "The quality signal is decent, but a sample is important before any real order."
-  const moqLine =
-    supplier.moq <= 500
-      ? "The MOQ is low enough for a practical test order."
-      : supplier.moq <= 1200
-        ? "The MOQ is moderate, so demand should be validated before scaling."
-        : "The MOQ is high, so the buyer needs confidence in sales before locking cash into stock."
-  const leadLine =
-    supplier.lead_time_days <= 25
-      ? "Lead time is relatively fast, which helps restocking."
-      : supplier.lead_time_days <= 45
-        ? "Lead time is normal for sourcing and should be planned in advance."
-        : "Lead time is slow, so this supplier fits planned buying more than urgent restocking."
-
-  return [qualityLine, moqLine, leadLine]
-}
-
-function riskMitigationPlan(supplier: ReturnType<typeof normalizeSupplier>) {
-  const crossBorder =
-    supplier.country === "Bangladesh"
-      ? "Even with local sourcing, confirm final inspection and packaging quality before shipment."
-      : "Because the goods travel across borders, ask for stronger packaging photos, shipping timeline confirmation, and final inspection proof."
-
-  return [
-    "Request fresh product photos or a sample before paying for bulk production.",
-    "Confirm unit price, MOQ, and lead time in writing so the quote cannot drift later.",
-    crossBorder,
-    "Ask how defects, delays, or damaged cartons are handled before the first order is placed.",
-  ]
-}
-
-function negotiationChecklist(supplier: ReturnType<typeof normalizeSupplier>, paymentTerms: string, incoterms: string[]) {
-  const targetAsk =
-    supplier.moq >= 1000
-      ? "Ask whether the first order can start closer to the MOQ instead of a higher factory preference."
-      : "Ask whether the supplier can hold this MOQ for repeat orders after the first sample approval."
-
-  return [
-    `Confirm whether the unit price can improve if order volume grows after the first run.`,
-    targetAsk,
-    `Clarify payment terms now. Current profile suggests: ${paymentTerms}.`,
-    `Lock shipping terms before payment. Current profile signals: ${incoterms.length > 0 ? incoterms.join(", ") : "to be confirmed"}.`,
-  ]
-}
-
-function outreachDraft(args: {
-  name: string
-  product: string
-  unitPrice: number
-  moq: number
-  leadTime: number
-}) {
-  return [
-    `Hello ${args.name} team,`,
-    `We are reviewing suppliers for ${args.product} and your profile stands out for fit, price, and lead time.`,
-    `Before we move further, could you confirm sample availability, packaging options, final inspection process, and whether the quoted price near $${args.unitPrice.toFixed(2)} can improve around the ${args.moq.toLocaleString()} MOQ level?`,
-    `If the sample looks right, we would like to discuss a first order with a lead time target near ${args.leadTime} days and a path for repeat buying.`,
-    `Best regards,`,
-    `Sourcery buyer team`,
-  ].join("\n\n")
-}
 
 function preferredChannel(row: Record<string, unknown>) {
   const email = typeof row.email === "string" ? row.email : null
@@ -194,7 +109,7 @@ export default async function SupplierDecisionPage({ params }: { params: Promise
   const image = getProductImage({ supplier })
   const incoterms = Array.isArray(metadata.incoterms) ? metadata.incoterms.map(String) : []
   const product = supplier.products?.[0] ?? supplier.subcategory
-  const recommendation = supplierRecommendation(supplier)
+  const recommendation = buildDecisionRecommendation(supplier)
   const initialOrderUnits = Math.max(supplier.moq, Math.min(supplier.moq * 2, 1500))
   const initialSpend = supplier.unit_price_usd * initialOrderUnits
   const reorderWindow = supplier.lead_time_days + 14
@@ -219,7 +134,14 @@ export default async function SupplierDecisionPage({ params }: { params: Promise
       <section className="overflow-hidden rounded-lg border border-black/10 bg-white shadow-sm">
         <div className="grid lg:grid-cols-[0.95fr_1.05fr]">
           <div className="relative min-h-[320px] bg-[#ece7dc]">
-            <img src={image.src} alt={image.alt} className="absolute inset-0 h-full w-full object-cover" />
+            <Image
+              src={image.src}
+              alt={image.alt}
+              fill
+              priority
+              sizes="(max-width: 1024px) 100vw, 48vw"
+              className="object-cover"
+            />
             <div className="absolute inset-0 bg-gradient-to-t from-[#16201d]/80 via-[#16201d]/25 to-transparent" />
             <div className="absolute bottom-5 left-5 right-5 space-y-2 text-[#f7f4ec]">
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#f0d58d]">Supplier decision</p>
@@ -250,7 +172,7 @@ export default async function SupplierDecisionPage({ params }: { params: Promise
             <div className="rounded-lg border border-black/10 bg-[#f7f4ec] p-4">
               <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#6d7a75]">Decision summary</p>
               <div className="mt-3 grid gap-2 text-sm leading-6 text-[#16201d]">
-                {decisionReasoning(supplier).map((line) => (
+                {buildDecisionReasoning(supplier).map((line) => (
                   <div key={line} className="flex items-start gap-2">
                     <CheckCircle2 className="mt-1 h-4 w-4 shrink-0 text-[#2e7d65]" />
                     <span>{line}</span>
@@ -349,7 +271,7 @@ export default async function SupplierDecisionPage({ params }: { params: Promise
 
           <Panel title="Risk mitigation before payment" icon={ShieldAlert}>
             <ul className="grid gap-3 text-sm leading-6 text-[#5d6965]">
-              {riskMitigationPlan(supplier).map((step) => (
+              {buildRiskMitigationPlan(supplier).map((step) => (
                 <li key={step} className="flex items-start gap-2 rounded-md border border-black/10 bg-[#fff8df] px-4 py-3">
                   <ShieldAlert className="mt-1 h-4 w-4 shrink-0 text-[#7a5b0f]" />
                   <span>{step}</span>
@@ -362,7 +284,7 @@ export default async function SupplierDecisionPage({ params }: { params: Promise
         <div className="space-y-4">
           <Panel title="Negotiation checklist" icon={CircleDollarSign}>
             <ul className="grid gap-3 text-sm leading-6 text-[#5d6965]">
-              {negotiationChecklist(supplier, paymentTerms, incoterms).map((step) => (
+              {buildNegotiationChecklist(supplier, paymentTerms, incoterms).map((step) => (
                 <li key={step} className="flex items-start gap-2 rounded-md border border-black/10 bg-[#f7f4ec] px-4 py-3">
                   <ClipboardCheck className="mt-1 h-4 w-4 shrink-0 text-[#2e7d65]" />
                   <span>{step}</span>
@@ -376,8 +298,8 @@ export default async function SupplierDecisionPage({ params }: { params: Promise
               This gives the team a clean first message so the sourcing flow ends in action, not just analysis.
             </p>
             <pre className="mt-4 whitespace-pre-wrap rounded-md border border-black/10 bg-[#f7f4ec] p-4 font-sans text-sm leading-6 text-[#16201d]">
-              {outreachDraft({
-                name: supplier.name,
+              {buildOutreachDraft({
+                supplierName: supplier.name,
                 product,
                 unitPrice: supplier.unit_price_usd,
                 moq: supplier.moq,

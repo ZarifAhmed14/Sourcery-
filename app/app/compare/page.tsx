@@ -1,5 +1,6 @@
 "use client"
 
+import Image from "next/image"
 import Link from "next/link"
 import type { ComponentType } from "react"
 import { useEffect, useMemo, useState } from "react"
@@ -188,7 +189,15 @@ export default function ComparePage() {
           </div>
           <div className="min-w-[260px] overflow-hidden rounded-xl border border-black/10 bg-[#16201d] text-[#f7f4ec] shadow-sm">
             <div className="h-36 overflow-hidden bg-[#ece7dc]">
-              <img src={productImage.src} alt={productImage.alt} className="h-full w-full object-cover" />
+              <Image
+                src={productImage.src}
+                alt={productImage.alt}
+                width={640}
+                height={288}
+                priority
+                sizes="(max-width: 768px) 100vw, 320px"
+                className="h-full w-full object-cover"
+              />
             </div>
             <div className="p-4">
               <span className="text-xs font-semibold uppercase tracking-[0.16em] text-[#d9b44a]">Selected product</span>

@@ -4,11 +4,13 @@ import { createContext, useContext, useEffect, useMemo, useState, type ReactNode
 
 type PreferencesContextValue = {
   bangladeshMode: boolean
+  preferencesReady: boolean
   setBangladeshMode: (v: boolean) => void
 }
 
 const PreferencesContext = createContext<PreferencesContextValue>({
   bangladeshMode: false,
+  preferencesReady: false,
   setBangladeshMode: () => {},
 })
 
@@ -16,6 +18,7 @@ const STORAGE_KEY = "sourcery.preferences.v1"
 
 export function PreferencesProvider({ children }: { children: ReactNode }) {
   const [bangladeshMode, setBangladeshModeState] = useState<boolean>(false)
+  const [preferencesReady, setPreferencesReady] = useState(false)
 
   useEffect(() => {
     try {
@@ -24,6 +27,9 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
       const parsed = JSON.parse(raw) as { bangladeshMode?: boolean }
       if (typeof parsed?.bangladeshMode === "boolean") setBangladeshModeState(parsed.bangladeshMode)
     } catch {}
+    finally {
+      setPreferencesReady(true)
+    }
   }, [])
 
   const setBangladeshMode = (v: boolean) => {
@@ -35,7 +41,7 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
     } catch {}
   }
 
-  const value = useMemo(() => ({ bangladeshMode, setBangladeshMode }), [bangladeshMode])
+  const value = useMemo(() => ({ bangladeshMode, preferencesReady, setBangladeshMode }), [bangladeshMode, preferencesReady])
 
   return <PreferencesContext.Provider value={value}>{children}</PreferencesContext.Provider>
 }

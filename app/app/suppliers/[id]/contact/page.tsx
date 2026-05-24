@@ -1,3 +1,4 @@
+import Image from "next/image"
 import Link from "next/link"
 import { notFound } from "next/navigation"
 import type { ComponentType, ReactNode } from "react"
@@ -23,6 +24,7 @@ import { CurrencyValue } from "@/components/sourcery/currency-value"
 import { formatMoney } from "@/lib/currency"
 import { getProductImage } from "@/lib/product-images"
 import { findDemoSupplier } from "@/lib/sourcery/demo-suppliers"
+import { buildNegotiationDraft, buildNegotiationChecklist } from "@/lib/sourcery/profile-copy"
 import { enrichSupplierProfileFields, inferSupplierLogisticsLane } from "@/lib/sourcery/supplier-profile-enrichment"
 import { normalizeSupplier } from "@/lib/sourcery/supplier-normalizer"
 import { getAdminClient, isAdminSupabaseConfigured } from "@/lib/supabase/admin"
@@ -33,33 +35,6 @@ function contactChannel(row: Record<string, unknown>) {
   if (email) return { label: "Email first", value: email, href: `mailto:${email}`, icon: Mail }
   if (phone) return { label: "Phone / WhatsApp first", value: phone, href: `tel:${phone}`, icon: Phone }
   return { label: "Website contact first", value: "Use supplier website or sourcing desk", href: null, icon: Mail }
-}
-
-function negotiationDraft(args: {
-  supplierName: string
-  product: string
-  unitPrice: number
-  moq: number
-  leadTime: number
-}) {
-  return [
-    `Hello ${args.supplierName} team,`,
-    `We are reviewing suppliers for ${args.product}. Your profile shows ${args.moq.toLocaleString()} MOQ, ${args.leadTime} day lead time, and a unit price around $${args.unitPrice.toFixed(2)}.`,
-    "Before moving forward, can you confirm sample availability, packaging options, final inspection process, and whether there is room to improve the unit price for a repeat order?",
-    "If the sample quality is strong, we would like to discuss a first test order and a scaling plan.",
-    "Best regards,",
-    "Sourcery buyer team",
-  ].join("\n\n")
-}
-
-function checklist(paymentTerms: string, incoterms: string[], moq: number) {
-  return [
-    "Confirm sample cost, sample timing, and whether the sample fee can be credited toward the first order.",
-    `Confirm MOQ flexibility. Current profile shows ${moq.toLocaleString()} units.`,
-    `Confirm payment terms before invoice. Current profile suggests: ${paymentTerms}.`,
-    `Lock shipping terms in writing. Current profile signals: ${incoterms.length > 0 ? incoterms.join(", ") : "to be confirmed"}.`,
-    "Ask for packaging photos, carton dimensions, and defect/delay handling before paying.",
-  ]
 }
 
 type ContactPageData = {
@@ -125,7 +100,7 @@ export default async function SupplierContactPage({ params }: { params: Promise<
   const lane = inferSupplierLogisticsLane({ supplier, metadata })
   const channel = contactChannel(contactRow)
   const ChannelIcon = channel.icon
-  const draft = negotiationDraft({
+  const draft = buildNegotiationDraft({
     supplierName: supplier.name,
     product,
     unitPrice: supplier.unit_price_usd,
@@ -154,7 +129,14 @@ export default async function SupplierContactPage({ params }: { params: Promise<
       <section className="overflow-hidden rounded-2xl border border-black/10 bg-[#16201d] text-[#f7f4ec] shadow-sm">
         <div className="grid lg:grid-cols-[0.85fr_1.15fr]">
           <div className="relative min-h-[320px] bg-[#0d1714]">
-            <img src={image.src} alt={image.alt} className="absolute inset-0 h-full w-full object-cover" />
+            <Image
+              src={image.src}
+              alt={image.alt}
+              fill
+              priority
+              sizes="(max-width: 1024px) 100vw, 42vw"
+              className="object-cover"
+            />
             <div className="absolute inset-0 bg-gradient-to-t from-[#16201d]/90 via-[#16201d]/30 to-transparent" />
             <div className="absolute bottom-5 left-5 right-5">
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#f0d58d]">Supplier contact desk</p>
@@ -213,7 +195,7 @@ export default async function SupplierContactPage({ params }: { params: Promise<
 
           <Panel title="First contact checklist" icon={ClipboardCheck}>
             <ul className="grid gap-3 text-sm leading-6 text-[#5d6965]">
-              {checklist(paymentTerms, incoterms, supplier.moq).map((item) => (
+              {buildNegotiationChecklist(supplier, paymentTerms, incoterms).map((item) => (
                 <li key={item} className="flex items-start gap-2 rounded-md border border-black/10 bg-[#f7f4ec] px-4 py-3">
                   <CheckCircle2 className="mt-1 h-4 w-4 shrink-0 text-[#2e7d65]" />
                   <span>{item}</span>

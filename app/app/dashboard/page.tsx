@@ -5,19 +5,20 @@ import { Button } from "@/components/ui/button"
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
 import { LocalRecentList } from "@/components/sourcery/local-recent-list"
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/server"
+import { buildWorkspaceRerunHref } from "@/lib/workspace-rerun"
 
 type SavedSearchRow = {
   id: string
   query: string
   bangladesh_mode: boolean
   created_at: string
-  metadata: { result_count?: number; confidence?: "high" | "medium" | "low"; country_diversity?: number; category?: string; product?: string } | null
+  metadata: { result_count?: number; confidence?: "high" | "medium" | "low"; country_diversity?: number; category?: string; product?: string; type?: string | null } | null
 }
 
 type LegacySavedSearchRow = {
   id: string
   query: string
-  filters: { bangladesh_mode?: boolean; bangladeshMode?: boolean } | null
+  filters: { bangladesh_mode?: boolean; bangladeshMode?: boolean; type?: string | null } | null
   results_snapshot: unknown[] | null
   created_at: string
 }
@@ -63,6 +64,7 @@ export default async function DashboardPage() {
           metadata: {
             result_count: Array.isArray(row.results_snapshot) ? row.results_snapshot.length : undefined,
             confidence: "medium",
+            type: row.filters?.type ?? null,
           },
         }))
   }
@@ -117,12 +119,21 @@ export default async function DashboardPage() {
                   <span>{new Date(row.created_at).toLocaleString()}</span>
                   {typeof row.metadata?.result_count === "number" && <span>{row.metadata.result_count} suppliers</span>}
                   {row.metadata?.product && <span>{row.metadata.product}</span>}
+                  {row.metadata?.type && <span>{row.metadata.type}</span>}
                   {row.metadata?.confidence && <span className="capitalize">{row.metadata.confidence} confidence</span>}
                   {row.bangladesh_mode && <span className="font-medium text-[#2e7d65]">Bangladesh Mode</span>}
                 </div>
               </div>
               <Button asChild variant="outline" size="sm" className="rounded-md bg-transparent">
-                <Link href={`/app?prefill=${encodeURIComponent(row.query)}`}>
+                <Link
+                  href={buildWorkspaceRerunHref({
+                    query: row.query,
+                    bangladeshMode: row.bangladesh_mode,
+                    category: row.metadata?.category,
+                    product: row.metadata?.product,
+                    type: row.metadata?.type,
+                  })}
+                >
                   <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
                   Re-run
                 </Link>

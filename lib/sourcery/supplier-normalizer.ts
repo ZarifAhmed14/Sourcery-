@@ -1,4 +1,5 @@
 import type { Supplier, SupplierCategory, SupplierRegion } from "@/lib/types"
+import { buildSupplierDescription } from "@/lib/sourcery/profile-copy"
 
 type SupplierDbRow = Record<string, unknown> & {
   similarity?: number | null
@@ -221,7 +222,22 @@ export function normalizeSupplier(row: SupplierDbRow): Supplier {
     category,
     subcategory: deriveSubcategory(row, products),
     products,
-    description: asString(row.description, "Supplier profile").replaceAll(rawName, name),
+    description: buildSupplierDescription(
+      {
+        name,
+        city: asString(row.city, "Unknown"),
+        country: asString(row.country, "Unknown"),
+        products,
+        subcategory: deriveSubcategory(row, products),
+        moq: normalizeMoq(row.moq, category),
+        lead_time_days: asNumber(row.lead_time_days, 1),
+        quality_rating: qualityRating,
+        on_time_rate: deriveOnTimeRate(row, riskScore),
+        bgmea_certified: asBoolean(row.bgmea_certified),
+        certifications: asStringArray(row.certifications),
+      },
+      asString(row.description, "Supplier profile").replaceAll(rawName, name),
+    ),
     unit_price_usd: asNumber(row.unit_price_usd, 0),
     moq: normalizeMoq(row.moq, category),
     lead_time_days: asNumber(row.lead_time_days, 1),

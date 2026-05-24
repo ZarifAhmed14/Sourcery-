@@ -15,6 +15,7 @@ export type RecentQuery = {
   ts: string
   category?: SupplierCategory
   product?: string
+  type?: string | null
   confidence?: "high" | "medium" | "low"
 }
 

@@ -1,7 +1,9 @@
 "use client"
 
+import Image from "next/image"
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react"
 import Link from "next/link"
+import { useSearchParams } from "next/navigation"
 import {
   ArrowRight,
   BadgeCheck,
@@ -21,6 +23,7 @@ import { cn } from "@/lib/utils"
 import { usePreferences } from "@/lib/preferences-context"
 import {
   consumeWorkspaceReturnIntent,
+  loadLatestResult,
   markWorkspaceReturnIntent,
   saveLatestResult,
   pushRecentQuery,
@@ -35,6 +38,7 @@ import { formatMoney } from "@/lib/currency"
 import { getProductVariantImage } from "@/lib/product-images"
 import type { SourcingResult } from "@/lib/sourcery/orchestrator"
 import type { Supplier, SupplierCategory, SupplierRegion } from "@/lib/types"
+import { readWorkspaceRerunParams } from "@/lib/workspace-rerun"
 
 type SupplierListResponse = {
   suppliers: Supplier[]
@@ -283,7 +287,8 @@ function hasSavedWorkspaceMemory(args: {
 }
 
 export function SourcingChat() {
-  const { bangladeshMode } = usePreferences()
+  const searchParams = useSearchParams()
+  const { bangladeshMode, preferencesReady, setBangladeshMode } = usePreferences()
 
   const [status, setStatus] = useState<"idle" | "loading" | "done" | "error">("idle")
   const [result, setResult] = useState<SourcingResult | null>(null)
@@ -302,7 +307,19 @@ export function SourcingChat() {
   const [hasRestoredState, setHasRestoredState] = useState(false)
   const [restoreScrollY, setRestoreScrollY] = useState<number | null>(null)
   const [supplierListError, setSupplierListError] = useState<string | null>(null)
+  const [pendingAutoRun, setPendingAutoRun] = useState<{
+    bangladeshMode: boolean
+    selectedCategory: SupplierCategory
+    selectedProduct: string
+    selectedCountry: string
+    selectedRegion: "Any region" | SupplierRegion
+    orderQuantity: string
+    selectedVariant: string | null
+    selectedSize: string | null
+  } | null>(null)
   const supplierListCache = useRef(new Map<string, Supplier[]>())
+  const bootstrapped = useRef(false)
+  const lastBangladeshMode = useRef<boolean | null>(null)
 
   const resetSearchState = () => {
     setStatus("idle")
@@ -310,6 +327,25 @@ export function SourcingChat() {
     setError(null)
     setHasSearched(false)
     setSelectedId(null)
+  }
+
+  const applyWorkspaceSnapshot = (savedState: ReturnType<typeof readWorkspaceState>, latestResult: SourcingResult | null) => {
+    if (!savedState && !latestResult) return
+
+    setHasSearched(Boolean(savedState?.hasSearched ?? latestResult))
+    setSelectedCategory((savedState?.selectedCategory as SupplierCategory | undefined) ?? undefined)
+    setSelectedProduct(savedState?.selectedProduct ?? undefined)
+    setSelectedCountry(savedState?.selectedCountry ?? "Any country")
+    setSelectedRegion((savedState?.selectedRegion as "Any region" | SupplierRegion) ?? "Any region")
+    setPriceBand((savedState?.priceBand as PriceBandValue) ?? "standard")
+    setOrderQuantity(savedState?.orderQuantity ?? "")
+    setSelectedVariant(savedState?.selectedVariant ?? null)
+    setSelectedSize(savedState?.selectedSize ?? null)
+    setSelectedId(savedState?.selectedId ?? latestResult?.suppliers[0]?.id ?? null)
+    setRestoreScrollY(typeof savedState?.scrollY === "number" ? savedState.scrollY : null)
+    setResult(latestResult)
+    setStatus(latestResult ? "done" : "idle")
+    setError(null)
   }
 
   const shouldRestoreWorkspaceOnLoad = () => {
@@ -335,25 +371,67 @@ export function SourcingChat() {
   }
 
   useEffect(() => {
+    if (!preferencesReady || bootstrapped.current) return
+    bootstrapped.current = true
+
+    const rerun = readWorkspaceRerunParams(searchParams)
+    if (rerun) {
+      const rerunBangladeshMode = Boolean(rerun.bangladeshMode)
+      const nextCategory = (rerun.category as SupplierCategory | null) ?? undefined
+      const nextProduct = rerun.product ?? undefined
+      const nextVariant = rerun.type ?? null
+      const nextRegion = ((rerun.region as SupplierRegion | "Any region" | null) ?? (rerunBangladeshMode ? "South Asia" : "Any region")) as
+        | "Any region"
+        | SupplierRegion
+      const nextCountry = rerun.country ?? (rerunBangladeshMode ? "Bangladesh" : "Any country")
+      const nextOrderQuantity = rerun.orderQuantity ?? ""
+
+      if (rerunBangladeshMode !== bangladeshMode) {
+        setBangladeshMode(rerunBangladeshMode)
+      }
+
+      setHasSearched(false)
+      setSelectedCategory(nextCategory)
+      setSelectedProduct(nextProduct)
+      setSelectedCountry(nextCountry)
+      setSelectedRegion(nextRegion)
+      setPriceBand("standard")
+      setOrderQuantity(nextOrderQuantity)
+      setSelectedVariant(nextVariant)
+      setSelectedSize(null)
+      setSelectedId(null)
+      setRestoreScrollY(null)
+      setResult(null)
+      setStatus("idle")
+      setError(null)
+
+      if (nextCategory && nextProduct) {
+        setPendingAutoRun({
+          bangladeshMode: rerunBangladeshMode,
+          selectedCategory: nextCategory,
+          selectedProduct: nextProduct,
+          selectedCountry: nextCountry,
+          selectedRegion: nextRegion,
+          orderQuantity: nextOrderQuantity,
+          selectedVariant: nextVariant,
+          selectedSize: null,
+        })
+      }
+
+      setHasRestoredState(true)
+      return
+    }
+
     const savedState = readWorkspaceState()
+    const latestResult = loadLatestResult()
     let latestResultRaw: string | null = null
     try {
       latestResultRaw = typeof window !== "undefined" ? window.localStorage.getItem("sourcery.latest_result.v1") : null
     } catch {}
     const shouldRestoreWorkspace = shouldRestoreWorkspaceOnLoad() || hasSavedWorkspaceMemory({ savedState, latestResultRaw })
 
-    if (savedState && shouldRestoreWorkspace) {
-      setHasSearched(Boolean(savedState.hasSearched))
-      setSelectedCategory(savedState.selectedCategory as SupplierCategory | undefined)
-      setSelectedProduct(savedState.selectedProduct ?? undefined)
-      setSelectedCountry(savedState.selectedCountry ?? "Any country")
-      setSelectedRegion((savedState.selectedRegion as "Any region" | SupplierRegion) ?? "Any region")
-      setPriceBand((savedState.priceBand as PriceBandValue) ?? "standard")
-      setOrderQuantity(savedState.orderQuantity ?? "")
-      setSelectedVariant(savedState.selectedVariant ?? null)
-      setSelectedSize(savedState.selectedSize ?? null)
-      setSelectedId(savedState.selectedId ?? null)
-      setRestoreScrollY(typeof savedState.scrollY === "number" ? savedState.scrollY : null)
+    if (shouldRestoreWorkspace) {
+      applyWorkspaceSnapshot(savedState, latestResult)
     } else {
       setHasSearched(false)
       setSelectedCategory(undefined)
@@ -366,18 +444,11 @@ export function SourcingChat() {
       setSelectedSize(null)
       setSelectedId(null)
       setRestoreScrollY(null)
-    }
-
-    if (shouldRestoreWorkspace && latestResultRaw) {
-      try {
-        setResult(JSON.parse(latestResultRaw) as SourcingResult)
-      } catch {}
-    } else {
       setResult(null)
     }
 
     setHasRestoredState(true)
-  }, [])
+  }, [applyWorkspaceSnapshot, bangladeshMode, preferencesReady, searchParams, setBangladeshMode])
 
   useEffect(() => {
     if (!hasRestoredState || typeof restoreScrollY !== "number") return
@@ -488,6 +559,13 @@ export function SourcingChat() {
   }, [countryOptions, selectedCountry])
 
   useEffect(() => {
+    if (!preferencesReady) return
+    if (lastBangladeshMode.current === null) {
+      lastBangladeshMode.current = bangladeshMode
+      return
+    }
+
+    lastBangladeshMode.current = bangladeshMode
     resetSearchState()
     if (bangladeshMode) {
       setSelectedRegion("South Asia")
@@ -497,7 +575,27 @@ export function SourcingChat() {
 
     setSelectedRegion("Any region")
     setSelectedCountry("Any country")
-  }, [bangladeshMode])
+  }, [bangladeshMode, preferencesReady])
+
+  useEffect(() => {
+    if (!hasRestoredState) return
+
+    const restoreFromStorage = () => {
+      if (typeof window === "undefined") return
+      if (window.location.pathname !== "/app") return
+      const savedState = readWorkspaceState()
+      const latestResult = loadLatestResult()
+      if (!savedState && !latestResult) return
+      applyWorkspaceSnapshot(savedState, latestResult)
+    }
+
+    window.addEventListener("pageshow", restoreFromStorage)
+    window.addEventListener("popstate", restoreFromStorage)
+    return () => {
+      window.removeEventListener("pageshow", restoreFromStorage)
+      window.removeEventListener("popstate", restoreFromStorage)
+    }
+  }, [applyWorkspaceSnapshot, hasRestoredState])
 
   const filteredPool = useMemo(() => {
     const selectedBand = selectedProduct ? priceBandOptions.find((band) => band.value === priceBand) ?? priceBandOptions[0] : null
@@ -583,8 +681,28 @@ export function SourcingChat() {
 
   const selectedBundle = displayedRanked.find((item) => item.supplier.id === selectedSupplier?.id) ?? null
 
-  const executeSourcing = async () => {
-    if (!selectedCategory || !selectedProduct) {
+  const executeSourcing = async (
+    override?: {
+      bangladeshMode?: boolean
+      selectedCategory?: SupplierCategory
+      selectedProduct?: string
+      selectedCountry?: string
+      selectedRegion?: "Any region" | SupplierRegion
+      orderQuantity?: string
+      selectedVariant?: string | null
+      selectedSize?: string | null
+    },
+  ) => {
+    const nextCategory = override?.selectedCategory ?? selectedCategory
+    const nextProduct = override?.selectedProduct ?? selectedProduct
+    const nextCountry = override?.selectedCountry ?? selectedCountry
+    const nextRegion = override?.selectedRegion ?? selectedRegion
+    const nextOrderQuantity = override?.orderQuantity ?? orderQuantity
+    const nextVariant = override?.selectedVariant ?? selectedVariant
+    const nextSize = override?.selectedSize ?? selectedSize
+    const nextBangladeshMode = override?.bangladeshMode ?? bangladeshMode
+
+    if (!nextCategory || !nextProduct) {
       setError("Choose a category and product first.")
       setStatus("error")
       return
@@ -592,14 +710,14 @@ export function SourcingChat() {
     const selectedBand = priceBandOptions.find((band) => band.value === priceBand) ?? priceBandOptions[0]
     const targetUnitPriceMin = selectedBand?.min
     const targetUnitPriceMax = selectedBand?.max
-    const normalizedOrderQuantity = parseOptionalNumber(orderQuantity)
+    const normalizedOrderQuantity = parseOptionalNumber(nextOrderQuantity)
     const composedQuery = buildSourcingQuery({
-      category: selectedCategory,
-      product: selectedProduct,
-      productVariant: selectedVariant,
-      productSize: selectedSize,
-      country: selectedCountry,
-      region: selectedRegion,
+      category: nextCategory,
+      product: nextProduct,
+      productVariant: nextVariant,
+      productSize: nextSize,
+      country: nextCountry,
+      region: nextRegion,
       targetPriceMin: targetUnitPriceMin,
       targetPriceMax: targetUnitPriceMax,
       orderQuantity: normalizedOrderQuantity,
@@ -615,12 +733,12 @@ export function SourcingChat() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           query: composedQuery,
-          bangladeshMode,
+          bangladeshMode: nextBangladeshMode,
           topK: 8,
-          category: selectedCategory ?? null,
-          product: selectedProduct ?? null,
-          country: selectedCountry === "Any country" ? null : selectedCountry,
-          region: selectedRegion === "Any region" ? null : selectedRegion,
+          category: nextCategory ?? null,
+          product: nextProduct ?? null,
+          country: nextCountry === "Any country" ? null : nextCountry,
+          region: nextRegion === "Any region" ? null : nextRegion,
           targetUnitPriceMin: targetUnitPriceMin ?? null,
           targetUnitPriceMax: targetUnitPriceMax ?? null,
           orderQuantity: normalizedOrderQuantity ?? null,
@@ -636,19 +754,21 @@ export function SourcingChat() {
       saveLatestResult(data)
       pushRecentQuery({
         query: composedQuery,
-        bangladeshMode,
+        bangladeshMode: nextBangladeshMode,
         count: data.suppliers.length,
         ts: new Date().toISOString(),
-        category: selectedCategory,
-        product: selectedProduct,
+        category: nextCategory,
+        product: nextProduct,
+        type: nextVariant,
         confidence: data.meta.confidence,
       })
       void saveSearchAction({
         query: composedQuery,
-        bangladeshMode,
+        bangladeshMode: nextBangladeshMode,
         result: data,
-        category: selectedCategory,
-        product: selectedProduct,
+        category: nextCategory,
+        product: nextProduct,
+        type: nextVariant,
       }).catch(() => undefined)
       setStatus("done")
     } catch (err) {
@@ -661,6 +781,14 @@ export function SourcingChat() {
     event.preventDefault()
     await executeSourcing()
   }
+
+  useEffect(() => {
+    if (!hasRestoredState || !pendingAutoRun) return
+
+    void executeSourcing(pendingAutoRun).finally(() => {
+      setPendingAutoRun(null)
+    })
+  }, [hasRestoredState, pendingAutoRun])
 
   const persistWorkspaceSnapshot = (nextSelectedId?: string | null) => {
     saveWorkspaceState({
@@ -1311,7 +1439,13 @@ function ProductVariantCard({
       )}
     >
       <div className="relative h-40 overflow-hidden bg-[#07100d] sm:h-44 lg:h-52">
-        <img src={image.src} alt={`${variant.name} preview`} className="absolute inset-0 h-full w-full object-contain object-center transition duration-300 group-hover:scale-[1.02]" loading="lazy" />
+        <Image
+          src={image.src}
+          alt={`${variant.name} preview`}
+          fill
+          sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+          className="object-contain object-center transition duration-300 group-hover:scale-[1.02]"
+        />
         <div className="absolute inset-x-0 bottom-0 min-h-[30%] bg-gradient-to-t from-[#07100d]/92 via-[#07100d]/58 to-transparent p-3 pt-8">
           <div className="text-sm font-semibold text-[#f7f4ec]">{variant.name}</div>
           <p className="mt-0.5 text-xs leading-5 text-[#dbe5df]">{variant.detail}</p>
@@ -1330,7 +1464,14 @@ function ProductVariantCard({
           <DialogContent className="max-w-6xl border-black/10 bg-[#f7f4ec] p-3">
             <DialogTitle className="sr-only">{variant.name}</DialogTitle>
             <div className="overflow-hidden rounded-xl bg-[#ece7dc]">
-              <img src={image.src} alt={`${variant.name} preview`} className="max-h-[84vh] w-full object-cover" />
+              <Image
+                src={image.src}
+                alt={`${variant.name} preview`}
+                width={1600}
+                height={1200}
+                sizes="90vw"
+                className="max-h-[84vh] h-auto w-full object-cover"
+              />
             </div>
           </DialogContent>
         </Dialog>
