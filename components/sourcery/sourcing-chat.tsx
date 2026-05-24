@@ -264,28 +264,6 @@ function cardSupplierExplanation(supplier: Supplier, discovery: SourcingResult["
   return isBad ? supplierExplanationFallback(supplier) : explanation
 }
 
-function hasSavedWorkspaceMemory(args: {
-  savedState: ReturnType<typeof readWorkspaceState>
-  latestResultRaw: string | null
-}) {
-  if (args.latestResultRaw) return true
-
-  const state = args.savedState
-  if (!state) return false
-
-  return Boolean(
-    state.hasSearched ||
-      state.selectedCategory ||
-      state.selectedProduct ||
-      state.selectedVariant ||
-      state.selectedSize ||
-      state.orderQuantity.trim() ||
-      state.selectedId ||
-      state.selectedCountry !== "Any country" ||
-      state.selectedRegion !== "Any region",
-  )
-}
-
 export function SourcingChat() {
   const searchParams = useSearchParams()
   const { bangladeshMode, preferencesReady, setBangladeshMode } = usePreferences()
@@ -424,11 +402,7 @@ export function SourcingChat() {
 
     const savedState = readWorkspaceState()
     const latestResult = loadLatestResult()
-    let latestResultRaw: string | null = null
-    try {
-      latestResultRaw = typeof window !== "undefined" ? window.localStorage.getItem("sourcery.latest_result.v1") : null
-    } catch {}
-    const shouldRestoreWorkspace = shouldRestoreWorkspaceOnLoad() || hasSavedWorkspaceMemory({ savedState, latestResultRaw })
+    const shouldRestoreWorkspace = shouldRestoreWorkspaceOnLoad()
 
     if (shouldRestoreWorkspace) {
       applyWorkspaceSnapshot(savedState, latestResult)

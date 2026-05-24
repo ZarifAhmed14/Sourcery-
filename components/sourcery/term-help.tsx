@@ -16,7 +16,7 @@ const TERM_DEFINITIONS: Record<string, string> = {
   Confidence: "How confident Sourcery is in this ranking based on available signals.",
   Landed: "Estimated total cost per unit after supplier price, shipping, customs, and packaging.",
   Margin: "Expected profit percentage after landed cost is removed from selling price.",
-  "Risk-adj": "Profit adjusted downward when supplier risk is higher.",
+  "Risk-adj": "Risk-adjusted margin. Higher is better: it rewards strong margin and reduces the score when supplier risk is higher.",
   "Total profit": "Estimated profit for the full order quantity.",
   "Order qty": "How many units you plan to buy for this order.",
   "Selling price": "The price you expect to sell one unit for.",
