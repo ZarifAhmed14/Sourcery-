@@ -79,14 +79,22 @@ async function loadSupplierPageData(id: string): Promise<SupplierPageData | null
   }
 }
 
-export default async function SupplierDetailPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function SupplierDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>
+  searchParams?: Promise<{ product?: string; type?: string; size?: string }>
+}) {
   const { id } = await params
+  const context = await searchParams
 
   const pageData = await loadSupplierPageData(id)
   if (!pageData) notFound()
 
   const { supplier, metadata, paymentTerms, website, monthlyCapacity } = pageData
-  const image = getProductImage({ supplier })
+  const image = getProductImage({ supplier, product: context?.product, variant: context?.type })
+  const selectedProductLabel = [context?.type ?? context?.product ?? supplier.products?.[0] ?? supplier.subcategory, context?.size].filter(Boolean).join(" / ")
   const logisticsLane = inferSupplierLogisticsLane({ supplier, metadata })
   const riskTone =
     supplier.risk_score <= 30
@@ -126,7 +134,7 @@ export default async function SupplierDetailPage({ params }: { params: Promise<{
             <div className="absolute inset-0 bg-gradient-to-t from-[#16201d]/88 via-[#16201d]/25 to-transparent" />
             <div className="absolute bottom-5 left-5 right-5">
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#f0d58d]">Product capability</p>
-              <p className="mt-2 max-w-sm text-sm leading-6 text-[#eef7f1]">{(supplier.products ?? [supplier.subcategory]).slice(0, 3).join(", ")}</p>
+              <p className="mt-2 max-w-sm text-sm leading-6 text-[#eef7f1]">{selectedProductLabel}</p>
             </div>
           </div>
           <div className="p-7 md:p-8">

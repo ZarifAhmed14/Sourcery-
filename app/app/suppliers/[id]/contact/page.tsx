@@ -88,14 +88,22 @@ async function loadContactPageData(id: string): Promise<ContactPageData | null> 
   }
 }
 
-export default async function SupplierContactPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function SupplierContactPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>
+  searchParams?: Promise<{ product?: string; type?: string; size?: string }>
+}) {
   const { id } = await params
+  const context = await searchParams
   const pageData = await loadContactPageData(id)
   if (!pageData) notFound()
 
   const { supplier, metadata, paymentTerms, email, website, contactRow } = pageData
   const product = supplier.products?.[0] ?? supplier.subcategory
-  const image = getProductImage({ supplier })
+  const image = getProductImage({ supplier, product: context?.product, variant: context?.type })
+  const selectedProductLabel = [context?.type ?? context?.product ?? product, context?.size].filter(Boolean).join(" / ")
   const incoterms = Array.isArray(metadata.incoterms) ? metadata.incoterms.map(String) : []
   const lane = inferSupplierLogisticsLane({ supplier, metadata })
   const channel = contactChannel(contactRow)
@@ -141,6 +149,7 @@ export default async function SupplierContactPage({ params }: { params: Promise<
             <div className="absolute bottom-5 left-5 right-5">
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#f0d58d]">Supplier contact desk</p>
               <h1 className="mt-2 font-serif text-4xl leading-none md:text-5xl">Contact {supplier.name}</h1>
+              <p className="mt-2 text-sm text-[#dbe5df]">{selectedProductLabel}</p>
               <p className="mt-3 flex items-center gap-2 text-sm text-[#dbe5df]">
                 <MapPin className="h-4 w-4" />
                 {supplier.city}, {supplier.country} - {supplier.region}

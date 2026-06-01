@@ -65,6 +65,7 @@ type CombinedAgentOutput = {
 }
 
 const RANKING_VERSION = "v4-audit-hardening-4"
+const SOURCE_AI_TIMEOUT_MS = 1500
 
 const LiteRankingItemSchema = z.object({
   supplier_id: z.string().min(2),
@@ -529,7 +530,12 @@ async function runAgentWithFallback(args: {
   }
 
   try {
-    const ranked = await callLiteRankingAgent(args.query, args.suppliers, args.bangladeshMode, args.buyerFilters, args.sourceProvider)
+    const ranked = await Promise.race([
+      callLiteRankingAgent(args.query, args.suppliers, args.bangladeshMode, args.buyerFilters, args.sourceProvider),
+      new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error("AI ranking timed out; using deterministic fallback.")), SOURCE_AI_TIMEOUT_MS)
+      }),
+    ])
     return {
       output: buildAiGuidedOutput(ranked.output, args.suppliers, args.query, args.bangladeshMode),
       mode: "ai",

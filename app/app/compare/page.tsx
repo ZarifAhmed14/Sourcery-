@@ -62,6 +62,9 @@ function buyerWarning(meta?: SourcingResult["meta"] | null, supplierCount = 0) {
 export default function ComparePage() {
   const searchParams = useSearchParams()
   const supplierId = searchParams.get("supplier")
+  const productParam = searchParams.get("product")
+  const variantParam = searchParams.get("type")
+  const sizeParam = searchParams.get("size")
   const [result, setResult] = useState<SourcingResult | null>(null)
   const [profitInputs, setProfitInputs] = useState<ProfitInputs>(DEFAULT_PROFIT_INPUTS)
   const [shortlistIds, setShortlistIds] = useState<string[]>([])
@@ -69,6 +72,7 @@ export default function ComparePage() {
   const [compareIds, setCompareIds] = useState<string[]>([])
   const [selectedProduct, setSelectedProduct] = useState<string | null>(null)
   const [selectedVariant, setSelectedVariant] = useState<string | null>(null)
+  const [selectedSize, setSelectedSize] = useState<string | null>(null)
   const { bangladeshMode } = usePreferences()
 
   useEffect(() => {
@@ -76,9 +80,10 @@ export default function ComparePage() {
     setResult(loadLatestResult())
     setShortlistIds(readShortlistIds())
     setCompareIds(readCompareSupplierIds())
-    setSelectedProduct(workspaceState?.selectedProduct ?? null)
-    setSelectedVariant(workspaceState?.selectedVariant ?? null)
-  }, [])
+    setSelectedProduct(productParam ?? workspaceState?.selectedProduct ?? null)
+    setSelectedVariant(variantParam ?? workspaceState?.selectedVariant ?? null)
+    setSelectedSize(sizeParam ?? workspaceState?.selectedSize ?? null)
+  }, [productParam, sizeParam, variantParam])
 
   useEffect(() => {
     let active = true
@@ -143,14 +148,23 @@ export default function ComparePage() {
   const lowestRisk = top5.reduce((candidate, supplier) => (supplier.risk_score < candidate.risk_score ? supplier : candidate), best)
   const lowestUnit = top5.reduce((candidate, supplier) => (supplier.unit_price_usd < candidate.unit_price_usd ? supplier : candidate), best)
   const productName = selectedVariant ?? best.products?.[0] ?? best.subcategory
+  const productLabel = [productName, selectedSize].filter(Boolean).join(" / ")
   const productImage =
     selectedProduct && selectedVariant
       ? getProductVariantImage(selectedProduct, selectedVariant, 0)
-      : getProductImage({ supplier: best, product: productName })
+      : getProductImage({ supplier: best, product: productName, variant: selectedVariant })
   const compareQuery = result?.meta.query ?? `Focused review for ${best.name}`
   const singleMode = top5.length === 1
   const backTarget = supplierId ? `/app/suppliers/${supplierId}` : "/app"
   const warning = buyerWarning(result?.meta, top5.length)
+  const contactHrefForSupplier = (supplier: Supplier) => {
+    const params = new URLSearchParams()
+    if (selectedProduct) params.set("product", selectedProduct)
+    if (selectedVariant) params.set("type", selectedVariant)
+    if (selectedSize) params.set("size", selectedSize)
+    const query = params.toString()
+    return `/app/suppliers/${supplier.id}/contact${query ? `?${query}` : ""}`
+  }
 
   return (
     <div className="space-y-6">
@@ -201,7 +215,7 @@ export default function ComparePage() {
             </div>
             <div className="p-4">
               <span className="text-xs font-semibold uppercase tracking-[0.16em] text-[#d9b44a]">Selected product</span>
-              <strong className="mt-1 block text-lg text-white">{productName}</strong>
+              <strong className="mt-1 block text-lg text-white">{productLabel}</strong>
               <span className="mt-1 block text-sm text-[#bdc8c2]">{top5.length} suppliers ready for margin and simulation review</span>
             </div>
           </div>
@@ -219,7 +233,7 @@ export default function ComparePage() {
         ) : null}
         <div className="mt-5 flex flex-wrap gap-2">
           <Button asChild className="rounded-md bg-[#16201d] text-[#f7f4ec] hover:bg-[#22312d]">
-            <Link href={`/app/suppliers/${best.id}/contact`}>
+            <Link href={contactHrefForSupplier(best)}>
               <Mail className="mr-1.5 h-4 w-4" />
               Contact front-runner
             </Link>
@@ -303,16 +317,17 @@ export default function ComparePage() {
           </div>
           <TrendingUp className="h-5 w-5 text-[#7a5b0f]" />
         </div>
-        <div className="grid grid-cols-[1.25fr_0.65fr_0.55fr_0.55fr_0.55fr_0.75fr] gap-3 px-5 py-3 text-xs font-semibold uppercase tracking-[0.14em] text-[#6d7a75]">
+        <div className="grid grid-cols-[1.2fr_0.55fr_0.5fr_0.5fr_0.5fr_0.55fr_0.55fr] gap-3 px-5 py-3 text-xs font-semibold uppercase tracking-[0.14em] text-[#6d7a75]">
           <span>Supplier</span>
           <span>Location</span>
           <TermLabel label="Unit price" />
           <TermLabel label="MOQ" />
           <TermLabel label="Lead" />
           <TermLabel label="Risk" />
+          <span className="text-right">Contact</span>
         </div>
         {top5.map((supplier, index) => (
-          <div key={supplier.id} className="grid grid-cols-[1.25fr_0.65fr_0.55fr_0.55fr_0.55fr_0.75fr] items-center gap-3 border-t border-black/10 px-5 py-4 text-sm">
+          <div key={supplier.id} className="grid grid-cols-[1.2fr_0.55fr_0.5fr_0.5fr_0.5fr_0.55fr_0.55fr] items-center gap-3 border-t border-black/10 px-5 py-4 text-sm">
             <div>
               <div className="font-semibold text-[#16201d]">#{index + 1} {supplier.name}</div>
               <div className="mt-1 text-xs text-[#6d7a75]">{supplier.certifications.slice(0, 3).join(", ") || "Certification not listed"}</div>
@@ -323,6 +338,12 @@ export default function ComparePage() {
             <span className="text-[#53605c]">{supplier.moq.toLocaleString()}</span>
             <span className="text-[#53605c]">{supplier.lead_time_days}d</span>
             <span className="w-fit rounded-full bg-[#f1ede3] px-3 py-1 text-xs font-semibold text-[#51605a]">{supplier.risk_score}/100</span>
+            <Link
+              href={contactHrefForSupplier(supplier)}
+              className="inline-flex justify-center rounded-md border border-black/10 px-3 py-2 text-xs font-semibold text-[#16201d] transition hover:bg-[#f1ede3]"
+            >
+              Contact
+            </Link>
           </div>
         ))}
       </section>

@@ -4,7 +4,7 @@
 // Inputs: 5 numeric fields shared across all suppliers. Outputs: landed cost, gross margin,
 // risk-adjusted profit, total profit, and a "best of" badge per category.
 
-import { useMemo } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Trophy, ShieldCheck, Scale } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
@@ -13,7 +13,7 @@ import { TermLabel } from "@/components/sourcery/term-help"
 import { rankProfit, type ProfitInputs, type ProfitResult } from "@/lib/profit"
 import type { Supplier } from "@/lib/types"
 import { cn } from "@/lib/utils"
-import { formatMoney } from "@/lib/currency"
+import { formatMoney, USD_TO_BDT } from "@/lib/currency"
 import { usePreferences } from "@/lib/preferences-context"
 
 type Props = {
@@ -45,6 +45,7 @@ function explainProfit(supplier: Supplier, p: ProfitResult, bangladeshMode: bool
 
 export function ProfitPanel({ suppliers, inputs, onChange }: Props) {
   const { bangladeshMode } = usePreferences()
+  const [usdToBdtRate, setUsdToBdtRate] = useState(USD_TO_BDT)
   // Compute ranked profit results — recomputed every render but the math is trivial.
   const ranked = useMemo(() => rankProfit(suppliers, inputs), [suppliers, inputs])
   // Quick lookup by id for joining with the supplier list.
@@ -54,7 +55,23 @@ export function ProfitPanel({ suppliers, inputs, onChange }: Props) {
 
   // Single update helper to keep input handlers concise.
   const update = (k: keyof ProfitInputs, v: number) => onChange({ ...inputs, [k]: v })
-  
+
+  useEffect(() => {
+    let active = true
+
+    void fetch("https://open.er-api.com/v6/latest/USD")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((payload) => {
+        const nextRate = Number(payload?.rates?.BDT)
+        if (!active || !Number.isFinite(nextRate) || nextRate <= 0) return
+        setUsdToBdtRate(nextRate)
+      })
+      .catch(() => undefined)
+
+    return () => {
+      active = false
+    }
+  }, [])
 
   return (
     <section className="rounded-lg border border-black/10 bg-white p-5 shadow-sm">
@@ -64,6 +81,12 @@ export function ProfitPanel({ suppliers, inputs, onChange }: Props) {
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#7a5b0f]">Profit Intelligence</p>
           <h2 className="mt-1 text-2xl font-semibold text-[#16201d]">Margin, landed cost, and risk-adjusted upside</h2>
         </div>
+        {bangladeshMode ? (
+          <div className="rounded-md border border-[#d9b44a]/35 bg-[#fff8df] px-3 py-2 text-right text-sm text-[#6b5a24]">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.16em]">BD mode</div>
+            <div className="mt-1 font-medium">$1 = ৳{usdToBdtRate.toFixed(2)} today</div>
+          </div>
+        ) : null}
       </header>
 
       {/* Negative-margin warning banner. */}
@@ -75,10 +98,31 @@ export function ProfitPanel({ suppliers, inputs, onChange }: Props) {
 
       {/* Inputs row — 5 numeric fields. */}
       <div className="mt-4 grid grid-cols-2 gap-3 rounded-lg border border-black/10 bg-[#f7f4ec] p-4 md:grid-cols-5">
-        <NumberField id="selling_price" label="Selling price" suffix="$" step={0.5} value={inputs.selling_price} onChange={(v) => update("selling_price", v)} />
-        <NumberField id="shipping" label="Shipping / unit" suffix="$" step={0.1} value={inputs.shipping_cost_per_unit} onChange={(v) => update("shipping_cost_per_unit", v)} />
+        <NumberField
+          id="selling_price"
+          label="Selling price"
+          suffix={bangladeshMode ? "৳" : "$"}
+          step={bangladeshMode ? 10 : 0.5}
+          value={bangladeshMode ? inputs.selling_price * usdToBdtRate : inputs.selling_price}
+          onChange={(v) => update("selling_price", bangladeshMode ? v / usdToBdtRate : v)}
+        />
+        <NumberField
+          id="shipping"
+          label="Shipping / unit"
+          suffix={bangladeshMode ? "৳" : "$"}
+          step={bangladeshMode ? 5 : 0.1}
+          value={bangladeshMode ? inputs.shipping_cost_per_unit * usdToBdtRate : inputs.shipping_cost_per_unit}
+          onChange={(v) => update("shipping_cost_per_unit", bangladeshMode ? v / usdToBdtRate : v)}
+        />
         <NumberField id="customs" label="Customs %" suffix="%" step={0.5} value={inputs.customs_rate} onChange={(v) => update("customs_rate", v)} />
-        <NumberField id="packaging" label="Packaging / unit" suffix="$" step={0.1} value={inputs.packaging_cost_per_unit} onChange={(v) => update("packaging_cost_per_unit", v)} />
+        <NumberField
+          id="packaging"
+          label="Packaging / unit"
+          suffix={bangladeshMode ? "৳" : "$"}
+          step={bangladeshMode ? 5 : 0.1}
+          value={bangladeshMode ? inputs.packaging_cost_per_unit * usdToBdtRate : inputs.packaging_cost_per_unit}
+          onChange={(v) => update("packaging_cost_per_unit", bangladeshMode ? v / usdToBdtRate : v)}
+        />
         <NumberField id="qty" label="Order qty" suffix="" step={50} value={inputs.order_quantity} onChange={(v) => update("order_quantity", Math.max(0, Math.round(v)))} />
       </div>
 
@@ -154,7 +198,7 @@ function NumberField({
         <TermLabel label={label} />
       </Label>
       <div className="flex items-center rounded-md border border-border/70 bg-background px-2">
-        {suffix === "$" && <span className="text-xs text-muted-foreground">$</span>}
+        {(suffix === "$" || suffix === "৳") && <span className="text-xs text-muted-foreground">{suffix}</span>}
         <Input
           id={id}
           type="number"

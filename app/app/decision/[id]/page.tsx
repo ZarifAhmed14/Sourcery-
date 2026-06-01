@@ -99,16 +99,24 @@ async function loadSupplierDecisionData(id: string): Promise<SupplierDecisionDat
   }
 }
 
-export default async function SupplierDecisionPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function SupplierDecisionPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>
+  searchParams?: Promise<{ product?: string; type?: string; size?: string }>
+}) {
   const { id } = await params
+  const context = await searchParams
 
   const decisionData = await loadSupplierDecisionData(id)
   if (!decisionData) notFound()
 
   const { supplier, metadata, paymentTerms, contactName, email, phone, contactRow } = decisionData
-  const image = getProductImage({ supplier })
+  const image = getProductImage({ supplier, product: context?.product, variant: context?.type })
   const incoterms = Array.isArray(metadata.incoterms) ? metadata.incoterms.map(String) : []
   const product = supplier.products?.[0] ?? supplier.subcategory
+  const selectedProductLabel = [context?.type ?? context?.product ?? product, context?.size].filter(Boolean).join(" / ")
   const recommendation = buildDecisionRecommendation(supplier)
   const initialOrderUnits = Math.max(supplier.moq, Math.min(supplier.moq * 2, 1500))
   const initialSpend = supplier.unit_price_usd * initialOrderUnits
@@ -146,6 +154,7 @@ export default async function SupplierDecisionPage({ params }: { params: Promise
             <div className="absolute bottom-5 left-5 right-5 space-y-2 text-[#f7f4ec]">
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#f0d58d]">Supplier decision</p>
               <h1 className="font-serif text-4xl leading-none md:text-5xl">{supplier.name}</h1>
+              <p className="text-sm text-[#dbe5df]">{selectedProductLabel}</p>
               <p className="flex items-center gap-2 text-sm text-[#dbe5df]">
                 <MapPin className="h-4 w-4" />
                 {supplier.city}, {supplier.country} · {supplier.region}

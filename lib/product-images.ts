@@ -274,9 +274,42 @@ const PRODUCT_VARIANT_IMAGES: Record<string, Record<string, string>> = {
   },
 }
 
+function normalizeImageKey(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[_-]+/g, " ")
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+}
+
+function imageForProductName(product: string | null | undefined): string | undefined {
+  if (!product) return undefined
+  const normalized = normalizeImageKey(product)
+  return PRODUCT_IMAGES[product.trim().toLowerCase()] ?? PRODUCT_IMAGES[normalized]
+}
+
+function imageForVariant(product: string, variant: string): string | undefined {
+  const productKeys = [product.trim().toLowerCase(), normalizeImageKey(product)]
+  const variantKeys = [variant.trim().toLowerCase(), normalizeImageKey(variant)]
+
+  for (const productKey of productKeys) {
+    const variants = PRODUCT_VARIANT_IMAGES[productKey]
+    if (!variants) continue
+    for (const variantKey of variantKeys) {
+      const src = variants[variantKey]
+      if (src) return src
+    }
+  }
+
+  return undefined
+}
+
 export function getProductImage(input: {
   category?: SupplierCategory | null
   product?: string | null
+  variant?: string | null
   supplier?: Pick<Supplier, "category" | "products" | "subcategory"> | null
 }): ProductImage {
   const product =
@@ -284,9 +317,9 @@ export function getProductImage(input: {
     input.supplier?.products?.[0] ??
     input.supplier?.subcategory ??
     null
-  const normalizedProduct = product?.trim().toLowerCase()
+  const variant = input.variant?.trim() || null
   const category = input.category ?? input.supplier?.category
-  if (!category && !normalizedProduct) {
+  if (!category && !product && !variant) {
     return {
       src: GENERIC_PRODUCT_IMAGE,
       alt: "Supplier product preview",
@@ -294,21 +327,22 @@ export function getProductImage(input: {
     }
   }
   const src =
-    (normalizedProduct && PRODUCT_IMAGES[normalizedProduct]) ||
+    (product && variant ? imageForVariant(product, variant) : undefined) ||
+    imageForProductName(variant) ||
+    imageForProductName(product) ||
+    input.supplier?.products?.map(imageForProductName).find(Boolean) ||
     (category ? CATEGORY_IMAGES[category] : undefined) ||
     CATEGORY_IMAGES.accessories
 
   return {
-    src,
-    alt: product ? `Product preview for ${product}` : "Product category preview",
+    src: src ?? GENERIC_PRODUCT_IMAGE,
+    alt: variant ? `${variant} product preview` : product ? `Product preview for ${product}` : "Product category preview",
     credit: "Product category preview",
   }
 }
 
 export function getProductVariantImage(product: string, variant: string, index: number): ProductImage {
-  const productKey = product.trim().toLowerCase()
-  const variantKey = variant.trim().toLowerCase()
-  const src = PRODUCT_VARIANT_IMAGES[productKey]?.[variantKey]
+  const src = imageForVariant(product, variant) ?? imageForProductName(variant)
 
   if (src) {
     return {

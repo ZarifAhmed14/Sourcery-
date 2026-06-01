@@ -782,6 +782,15 @@ export function SourcingChat() {
     saveCompareSupplierIds(displayedRanked.map((item) => item.supplier.id))
   }
 
+  const buildAnalysisHref = (path: string) => {
+    const params = new URLSearchParams()
+    if (selectedProduct) params.set("product", selectedProduct)
+    if (selectedVariant) params.set("type", selectedVariant)
+    if (selectedSize) params.set("size", selectedSize)
+    const query = params.toString()
+    return query ? `${path}${path.includes("?") ? "&" : "?"}${query}` : path
+  }
+
   useEffect(() => {
     if (!hasRestoredState) return
     const handlePageHide = () => persistWorkspaceSnapshot(selectedId)
@@ -1070,7 +1079,7 @@ export function SourcingChat() {
                 <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
                   <div className="flex flex-wrap gap-2">
                     <Button asChild variant="outline" className="rounded-lg border-black/10 bg-transparent text-[#16201d] hover:bg-[#f1ede3] hover:text-[#16201d]">
-                      <Link href={`/app/compare?supplier=${item.supplier.id}`}>
+                      <Link href={buildAnalysisHref(`/app/compare?supplier=${item.supplier.id}`)}>
                         Profit view
                       </Link>
                     </Button>
@@ -1111,7 +1120,7 @@ export function SourcingChat() {
             {displayedRanked.length > 0 ? (
             <Button asChild variant="outline" className="rounded-lg border-black/10 bg-transparent text-[#16201d] hover:bg-[#f1ede3] hover:text-[#16201d]">
               <Link
-                href="/app/compare"
+                href={buildAnalysisHref("/app/compare")}
                 onClick={() => {
                   persistWorkspaceSnapshot(selectedSupplier?.id ?? displayedRanked[0]?.supplier.id ?? null)
                   markWorkspaceReturnIntent()
@@ -1132,7 +1141,7 @@ export function SourcingChat() {
                   className="rounded-2xl border border-black/10 bg-[#fffdf9] p-4 transition hover:border-[#d9b44a]/70 hover:bg-white hover:shadow-md"
                 >
                   <Link
-                    href={`/app/suppliers/${item.supplier.id}`}
+                    href={buildAnalysisHref(`/app/suppliers/${item.supplier.id}`)}
                     onClick={() => {
                       setSelectedId(item.supplier.id)
                       persistWorkspaceSnapshot(item.supplier.id)
@@ -1172,7 +1181,7 @@ export function SourcingChat() {
                   <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-black/10 pt-3">
                     <div className="flex flex-wrap gap-2">
                       <Link
-                        href={`/app/compare?supplier=${item.supplier.id}`}
+                        href={buildAnalysisHref(`/app/compare?supplier=${item.supplier.id}`)}
                         onClick={() => {
                           persistWorkspaceSnapshot(item.supplier.id)
                           markWorkspaceReturnIntent()
@@ -1182,7 +1191,7 @@ export function SourcingChat() {
                         Profit view
                       </Link>
                     <Link
-                      href={`/app/suppliers/${item.supplier.id}`}
+                      href={buildAnalysisHref(`/app/suppliers/${item.supplier.id}`)}
                       onClick={() => {
                         persistWorkspaceSnapshot(item.supplier.id)
                         markWorkspaceReturnIntent()
